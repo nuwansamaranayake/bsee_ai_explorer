@@ -1,0 +1,15 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+sqlalchemy==2.0.36
+pandas==2.2.3
+anthropic==0.43.0
+chromadb==0.5.23
+langchain==0.3.14
+langchain-community==0.3.14
+langchain-chroma==0.2.2
+pymupdf==1.25.3
+python-dotenv==1.0.1
+pydantic==2.10.4
+httpx==0.28.1
+python-multipart==0.0.20
+aiofiles==24.1.0
