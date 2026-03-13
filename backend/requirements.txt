@@ -17,3 +17,6 @@ aiofiles==24.1.0
 tenacity==9.0.0
 reportlab>=4.0
 matplotlib>=3.8
+apscheduler>=3.10,<4
+beautifulsoup4>=4.12
+psutil>=5.9
