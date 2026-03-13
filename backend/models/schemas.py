@@ -54,3 +54,49 @@ class Production(BaseModel):
     oil_bbl: float = 0.0
     gas_mcf: float = 0.0
     boe: float = 0.0
+
+
+# ---------------------------------------------------------------------------
+# Step 3.2 — Document Search
+# ---------------------------------------------------------------------------
+
+class DocumentSearchRequest(BaseModel):
+    query: str
+    top_k: int = 5
+    doc_type: str | None = None  # "safety_alert" | "investigation_report" | None
+
+
+class Citation(BaseModel):
+    source_file: str
+    title: str
+    page_number: int
+    relevance_score: float
+    excerpt: str
+
+
+class DocumentSearchResponse(BaseModel):
+    answer: str
+    citations: list[Citation]
+    query: str
+    doc_count: int
+    generated_at: str
+
+
+class DocumentStatsResponse(BaseModel):
+    total_documents: int
+    total_chunks: int
+    safety_alerts: int
+    investigation_reports: int
+    oldest_date: str | None = None
+    newest_date: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Step 3.3 — PDF Report
+# ---------------------------------------------------------------------------
+
+class ReportRequest(BaseModel):
+    operator: str | None = None
+    year_start: int | None = None
+    year_end: int | None = None
+    include_ai: bool = True
