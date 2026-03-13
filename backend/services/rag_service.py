@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 import chromadb
 
 from services.claude_service import get_claude_service
+from services.input_sanitizer import sanitize_user_input, sanitize_document_text
 from services.prompts import RAG_SYSTEM, RAG_USER
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,9 @@ class RAGService:
         doc_type: str | None = None,
     ) -> dict:
         """Full RAG pipeline: query → retrieve → synthesize → cite."""
+        # 0. Sanitize user query (injection detection)
+        query = sanitize_user_input(query, max_length=300, endpoint="documents")
+
         # 1. Query ChromaDB (sync call — wrap in thread)
         where_filter = {"doc_type": doc_type} if doc_type else None
         results = await asyncio.to_thread(
@@ -59,13 +63,14 @@ class RAGService:
                 "generated_at": datetime.now(timezone.utc).isoformat(),
             }
 
-        # 2. Build context string
+        # 2. Build context string (sanitize each document chunk)
         context_parts = []
         for i, (doc, meta) in enumerate(zip(documents, metadatas)):
             title = meta.get("title", meta.get("source_file", "Unknown"))
             page = meta.get("page_number", "?")
+            clean_doc = sanitize_document_text(doc, max_length=2000)
             context_parts.append(
-                f"[Document {i+1}] {title}, Page {page}:\n{doc}"
+                f"[Document {i+1}] {title}, Page {page}:\n{clean_doc}"
             )
         context = "\n\n---\n\n".join(context_parts)
 

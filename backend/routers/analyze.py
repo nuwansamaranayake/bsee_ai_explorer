@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from models.database import get_db
 from models.tables import Incident, INC, Production, IncidentRootCause
 from services.claude_service import get_claude_service, ClaudeServiceError, token_tracker
+from services.input_sanitizer import sanitize_user_input
 from services.prompts import (
     TREND_ANALYSIS_SYSTEM,
     TREND_ANALYSIS_USER,
@@ -153,6 +154,13 @@ async def analyze_trends(req: TrendAnalysisRequest, db: Session = Depends(get_db
     """AI trend analysis — generates a narrative briefing from safety data."""
     claude = _check_ai_available()
 
+    # Sanitize operator name FIRST (comes from UI dropdown, but defense-in-depth)
+    if req.operator:
+        try:
+            req.operator = sanitize_user_input(req.operator, max_length=200, endpoint="analyze_trends")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
     # Build data summary
     data_summary = _build_data_summary(db, req)
 
@@ -215,6 +223,13 @@ async def analyze_trends(req: TrendAnalysisRequest, db: Session = Depends(get_db
 async def analyze_categorize(req: CategorizeRequest, db: Session = Depends(get_db)):
     """AI root cause categorization — batch-classify incidents."""
     claude = _check_ai_available()
+
+    # Sanitize operator name (defense-in-depth)
+    if req.operator:
+        try:
+            req.operator = sanitize_user_input(req.operator, max_length=200, endpoint="analyze_categorize")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
     # Build query for incidents to categorize
     query = db.query(Incident)

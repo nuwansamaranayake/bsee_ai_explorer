@@ -17,6 +17,7 @@ from bs4 import BeautifulSoup
 
 from models.database import SessionLocal
 from models.phase4_tables import AlertSummary
+from services.input_sanitizer import sanitize_document_text
 
 logger = logging.getLogger(__name__)
 
@@ -139,11 +140,13 @@ class RegulatoryService:
             from services.prompts import REGULATORY_DIGEST_SYSTEM, REGULATORY_DIGEST_USER
 
             claude = get_claude_service()
+            # Sanitize PDF-extracted text before injecting into prompt
+            clean_text = sanitize_document_text(alert.raw_text, max_length=8000)
             user_prompt = REGULATORY_DIGEST_USER.format(
                 alert_number=alert.alert_number,
                 title=alert.title,
                 published_date=alert.published_date or "Unknown",
-                alert_text=alert.raw_text[:8000],  # Truncate to fit context
+                alert_text=clean_text,
             )
 
             digest = await claude.generate_json(REGULATORY_DIGEST_SYSTEM, user_prompt)

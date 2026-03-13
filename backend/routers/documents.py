@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 
 from models.schemas import DocumentSearchRequest
 from services.claude_service import get_claude_service, ClaudeServiceError, token_tracker
+from services.input_sanitizer import sanitize_user_input
 from services.rag_service import get_rag_service
 
 logger = logging.getLogger(__name__)
@@ -32,12 +33,21 @@ async def search_documents(req: DocumentSearchRequest):
             detail={"error": "No documents have been indexed yet. The document corpus is being prepared."},
         )
 
+    # Sanitize query — reject prompt injection attempts
+    try:
+        clean_query = sanitize_user_input(req.query, max_length=300, endpoint="documents")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     try:
         result = await rag.search(
-            query=req.query,
+            query=clean_query,
             top_k=req.top_k,
             doc_type=req.doc_type,
         )
+    except ValueError as e:
+        # sanitize_user_input inside rag.search may also raise
+        raise HTTPException(status_code=400, detail=str(e))
     except ClaudeServiceError as e:
         logger.error("Document search AI error: %s", e)
         raise HTTPException(

@@ -4,6 +4,7 @@ import { Sparkles, RefreshCw, Copy, Check, ChevronDown, ChevronRight, AlertCircl
 import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
 import { useTrendAnalysis } from "@/hooks/useAnalyze"
+import { sanitizeAIResponse } from "@/lib/sanitize"
 
 interface AIBriefingPanelProps {
   operator: string | null
@@ -135,7 +136,7 @@ export function AIBriefingPanel({ operator }: AIBriefingPanelProps) {
           {briefing && (
             <div className="space-y-3">
               <div className="prose prose-sm dark:prose-invert max-w-none">
-                <ReactMarkdown>{briefing.briefing}</ReactMarkdown>
+                <ReactMarkdown>{sanitizeAIResponse(briefing.briefing)}</ReactMarkdown>
               </div>
               <div className="flex items-center gap-4 pt-2 border-t text-xs text-muted-foreground">
                 <span>Operator: {briefing.operator}</span>

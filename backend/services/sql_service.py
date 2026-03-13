@@ -11,6 +11,7 @@ import sqlite3
 from typing import Any
 
 from services.claude_service import ClaudeService, ClaudeServiceError
+from services.input_sanitizer import validate_generated_sql, sanitize_user_input
 from services.prompts import (
     TEXT_TO_SQL_SYSTEM,
     TEXT_TO_SQL_USER,
@@ -105,7 +106,7 @@ class SQLService:
         """Validate that the SQL is a read-only SELECT or WITH statement.
 
         Whitelist approach: only allow queries starting with SELECT or WITH.
-        Reject any destructive statements.
+        Reject any destructive statements and system table access.
         """
         cleaned = sql.strip().upper()
 
@@ -117,12 +118,25 @@ class SQLService:
         dangerous_keywords = [
             "INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE",
             "TRUNCATE", "REPLACE", "ATTACH", "DETACH", "PRAGMA",
-            "GRANT", "REVOKE", "EXEC", "EXECUTE",
+            "GRANT", "REVOKE", "EXEC", "EXECUTE", "VACUUM",
         ]
         # Check for dangerous keywords as standalone words
         for keyword in dangerous_keywords:
             if re.search(rf'\b{keyword}\b', cleaned):
                 return False
+
+        # Reject system table access (schema enumeration)
+        system_tables = [
+            "SQLITE_MASTER", "SQLITE_SCHEMA",
+            "SQLITE_TEMP_MASTER", "SQLITE_TEMP_SCHEMA",
+        ]
+        for table in system_tables:
+            if table in cleaned:
+                return False
+
+        # Reject multi-statement queries (semicolons)
+        if ";" in sql.strip():
+            return False
 
         return True
 
@@ -157,9 +171,16 @@ class SQLService:
         """Execute SQL safely against SQLite (READ-ONLY).
 
         Uses a read-only connection with timeout and row limit.
+        Double-validated: _is_safe_query (legacy) + validate_generated_sql (new).
         """
         if not self._is_safe_query(sql):
             raise SQLServiceError("Query rejected: only SELECT queries are allowed.")
+
+        # Additional validation from input_sanitizer
+        try:
+            validate_generated_sql(sql)
+        except ValueError as e:
+            raise SQLServiceError(f"Query rejected: {e}") from e
 
         try:
             # Open in read-only mode using URI
@@ -222,6 +243,17 @@ class SQLService:
 
         Returns dict with keys: answer, sql, data, error (if any).
         """
+        # Sanitize user input (injection detection + length enforcement)
+        try:
+            question = sanitize_user_input(question, max_length=500, endpoint="chat")
+        except ValueError as e:
+            return {
+                "answer": str(e),
+                "sql": None,
+                "data": [],
+                "refused": True,
+            }
+
         # Check for obviously destructive requests
         dangerous_words = ["delete", "drop", "truncate", "update", "insert", "alter", "remove all"]
         question_lower = question.lower()

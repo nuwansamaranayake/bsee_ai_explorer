@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from services.claude_service import get_claude_service, ClaudeServiceError
+from services.input_sanitizer import sanitize_user_input
 from services.sql_service import get_sql_service, SQLServiceError
 from services.prompts import SQL_REFUSAL_MESSAGE
 
@@ -93,6 +94,12 @@ async def chat(req: ChatRequest):
     message = req.message.strip()
     if not message:
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
+
+    # Sanitize input — reject prompt injection attempts
+    try:
+        message = sanitize_user_input(message, max_length=500, endpoint="chat")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     return StreamingResponse(
         _stream_chat_response(message),

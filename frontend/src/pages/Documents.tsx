@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { CitationCard } from "@/components/CitationCard"
 import { useDocumentSearch, useDocumentStats } from "@/hooks/useDocuments"
+import { sanitizeAIResponse } from "@/lib/sanitize"
 
 const SUGGESTED_QUERIES = [
   "What caused the Deepwater Horizon explosion?",
@@ -168,7 +169,7 @@ export default function Documents() {
         <Card>
           <CardContent className="p-6">
             <div className="prose prose-sm dark:prose-invert max-w-none">
-              <ReactMarkdown>{result.answer}</ReactMarkdown>
+              <ReactMarkdown>{sanitizeAIResponse(result.answer)}</ReactMarkdown>
             </div>
             <div className="flex items-center gap-4 pt-3 mt-3 border-t text-xs text-muted-foreground">
               <span>Query: &ldquo;{result.query}&rdquo;</span>

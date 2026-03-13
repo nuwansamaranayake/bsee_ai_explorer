@@ -4,6 +4,7 @@ import { Send, Bot, User, ChevronDown, ChevronRight, RefreshCw, Database, Code }
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
+import { sanitizeAIResponse } from "@/lib/sanitize"
 
 const API_BASE = import.meta.env.VITE_API_URL || ""
 
@@ -108,7 +109,7 @@ function AssistantMessage({ message }: { message: ChatMessage }) {
         {/* Answer (always visible) */}
         <div className={`rounded-lg px-4 py-3 ${message.error ? "bg-destructive/10 text-destructive" : "bg-muted"}`}>
           <div className="prose prose-sm dark:prose-invert max-w-none">
-            <ReactMarkdown>{message.content}</ReactMarkdown>
+            <ReactMarkdown>{sanitizeAIResponse(message.content)}</ReactMarkdown>
           </div>
         </div>
       </div>
