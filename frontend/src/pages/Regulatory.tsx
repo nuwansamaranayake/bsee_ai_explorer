@@ -2,6 +2,8 @@ import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
+import { ErrorCard } from "@/components/ErrorCard"
 import {
   useAlerts,
   useAlertStats,
@@ -9,7 +11,7 @@ import {
   useUpdateAlertStatus,
   useTriggerScrape,
 } from "@/hooks/useRegulatory"
-import { AlertTriangle, RefreshCw, FileText, CheckCircle, XCircle, Loader2 } from "lucide-react"
+import { AlertTriangle, RefreshCw, FileText, CheckCircle, XCircle, Loader2, AlertCircle } from "lucide-react"
 
 const STATUS_COLORS: Record<string, string> = {
   new: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
@@ -22,8 +24,8 @@ export default function Regulatory() {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [page, setPage] = useState(0)
 
-  const { data: alertsRes, isLoading, error } = useAlerts(statusFilter, 20, page * 20)
-  const { data: statsRes } = useAlertStats()
+  const { data: alertsRes, isLoading, isError: alertsError, error, refetch: refetchAlerts } = useAlerts(statusFilter, 20, page * 20)
+  const { data: statsRes, isLoading: statsLoading, isError: statsError } = useAlertStats()
   const generateDigest = useGenerateDigest()
   const updateStatus = useUpdateAlertStatus()
   const triggerScrape = useTriggerScrape()
@@ -31,6 +33,9 @@ export default function Regulatory() {
   const alerts = alertsRes?.data || []
   const stats = statsRes?.data
   const total = (alertsRes?.meta?.total as number) || 0
+
+  // Safe error message extraction
+  const alertErrorMsg = error instanceof Error ? error.message : "Unable to load alerts."
 
   return (
     <div className="p-6 space-y-6">
@@ -54,8 +59,32 @@ export default function Regulatory() {
         </Button>
       </div>
 
+      {/* Scrape error feedback */}
+      {triggerScrape.isError && (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          Failed to check for updates. Please try again.
+        </div>
+      )}
+
       {/* Stats Cards */}
-      {stats && (
+      {statsError ? (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          Unable to load alert statistics.
+        </div>
+      ) : statsLoading ? (
+        <div className="grid grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Card key={`stat-skel-${i}`}>
+              <CardContent className="pt-4 space-y-2">
+                <Skeleton className="h-8 w-12" />
+                <Skeleton className="h-3 w-20" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : stats ? (
         <div className="grid grid-cols-4 gap-4">
           <Card className="cursor-pointer hover:border-primary" onClick={() => setStatusFilter(undefined)}>
             <CardContent className="pt-4">
@@ -82,13 +111,45 @@ export default function Regulatory() {
             </CardContent>
           </Card>
         </div>
+      ) : null}
+
+      {/* Mutation error feedback */}
+      {generateDigest.isError && (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          Failed to generate AI digest. Please try again.
+        </div>
+      )}
+      {updateStatus.isError && (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          Failed to update alert status. Please try again.
+        </div>
       )}
 
       {/* Alert List */}
       <div className="space-y-3">
-        {isLoading && <p className="text-muted-foreground">Loading alerts...</p>}
-        {error && <p className="text-destructive">Failed to load alerts: {(error as Error).message}</p>}
-        {!isLoading && alerts.length === 0 && (
+        {isLoading && (
+          <div className="space-y-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Card key={`alert-skel-${i}`}>
+                <CardHeader className="pb-2 space-y-2">
+                  <Skeleton className="h-5 w-48" />
+                  <Skeleton className="h-4 w-full" />
+                </CardHeader>
+              </Card>
+            ))}
+          </div>
+        )}
+        {alertsError && (
+          <ErrorCard
+            message="Failed to load alerts"
+            description={alertErrorMsg}
+            variant="server"
+            onRetry={() => refetchAlerts()}
+          />
+        )}
+        {!isLoading && !alertsError && alerts.length === 0 && (
           <Card>
             <CardContent className="py-8 text-center text-muted-foreground">
               <AlertTriangle className="mx-auto h-8 w-8 mb-2" />
@@ -140,7 +201,7 @@ export default function Regulatory() {
                         <p className="text-sm">{alert.ai_impact}</p>
                       </>
                     )}
-                    {alert.ai_action_items.length > 0 && (
+                    {Array.isArray(alert.ai_action_items) && alert.ai_action_items.length > 0 && (
                       <>
                         <h4 className="font-semibold text-sm">Action Items</h4>
                         <ul className="list-disc list-inside text-sm space-y-1">

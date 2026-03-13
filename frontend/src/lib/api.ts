@@ -5,9 +5,13 @@
  * - Includes request timeouts (30s default, 120s for AI endpoints)
  * - Never exposes raw Error objects, status codes, or technical details to the UI
  * - All errors thrown are clean Error instances with user-facing messages
+ * - Injects Authorization header from sessionStorage for authenticated requests
+ * - Handles 401 responses by clearing session and redirecting to /login
  */
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || ""
+const TOKEN_KEY = "beacon_token"
+const USER_KEY = "beacon_user"
 
 /** Default timeout for API requests (ms) */
 const DEFAULT_TIMEOUT_MS = 30_000
@@ -88,10 +92,17 @@ export async function apiClient<T>(
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
+  // Inject auth token from sessionStorage (if available)
+  const token = sessionStorage.getItem(TOKEN_KEY)
+  const authHeaders: Record<string, string> = token
+    ? { Authorization: `Bearer ${token}` }
+    : {}
+
   try {
     const response = await fetch(url, {
       headers: {
         "Content-Type": "application/json",
+        ...authHeaders,
         ...fetchOptions.headers,
       },
       signal: controller.signal,
@@ -99,6 +110,17 @@ export async function apiClient<T>(
     })
 
     clearTimeout(timeoutId)
+
+    // 401 Unauthorized — session expired or invalid, redirect to login
+    if (response.status === 401) {
+      sessionStorage.removeItem(TOKEN_KEY)
+      sessionStorage.removeItem(USER_KEY)
+      // Only redirect if not already on the login page
+      if (!window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login"
+      }
+      throw new Error("Session expired. Please sign in again.")
+    }
 
     if (!response.ok) {
       // Try to parse error body

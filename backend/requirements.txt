@@ -20,3 +20,4 @@ matplotlib>=3.8
 apscheduler>=3.10,<4
 beautifulsoup4>=4.12
 psutil>=5.9
+PyJWT>=2.8.0

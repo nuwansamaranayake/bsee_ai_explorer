@@ -5,7 +5,7 @@ import os
 import sys
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
@@ -130,22 +130,28 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 
 from routers import operators, incidents, incs, platforms, production, analyze, chat, documents, reports, metrics
-from routers import regulatory, scheduler, monitoring
+from routers import regulatory, scheduler, monitoring, auth
+from middleware.auth_middleware import get_current_user, require_admin
 
-app.include_router(operators.router, prefix="/api", tags=["operators"])
-app.include_router(incidents.router, prefix="/api", tags=["incidents"])
-app.include_router(incs.router, prefix="/api", tags=["incs"])
-app.include_router(platforms.router, prefix="/api", tags=["platforms"])
-app.include_router(production.router, prefix="/api", tags=["production"])
-app.include_router(metrics.router, prefix="/api", tags=["metrics"])
-app.include_router(analyze.router, prefix="/api", tags=["analyze"])
-app.include_router(chat.router, prefix="/api", tags=["chat"])
-app.include_router(documents.router, prefix="/api", tags=["documents"])
-app.include_router(reports.router, prefix="/api", tags=["reports"])
-# Phase 4 routers
-app.include_router(regulatory.router, prefix="/api", tags=["regulatory"])
-app.include_router(scheduler.router, prefix="/api", tags=["scheduler"])
-app.include_router(monitoring.router, prefix="/api", tags=["monitoring"])
+# Auth router — public (login, logout do NOT require a token)
+app.include_router(auth.router, prefix="/api", tags=["auth"])
+
+# Protected routers — require valid JWT token
+app.include_router(operators.router, prefix="/api", tags=["operators"], dependencies=[Depends(get_current_user)])
+app.include_router(incidents.router, prefix="/api", tags=["incidents"], dependencies=[Depends(get_current_user)])
+app.include_router(incs.router, prefix="/api", tags=["incs"], dependencies=[Depends(get_current_user)])
+app.include_router(platforms.router, prefix="/api", tags=["platforms"], dependencies=[Depends(get_current_user)])
+app.include_router(production.router, prefix="/api", tags=["production"], dependencies=[Depends(get_current_user)])
+app.include_router(metrics.router, prefix="/api", tags=["metrics"], dependencies=[Depends(get_current_user)])
+app.include_router(analyze.router, prefix="/api", tags=["analyze"], dependencies=[Depends(get_current_user)])
+app.include_router(chat.router, prefix="/api", tags=["chat"], dependencies=[Depends(get_current_user)])
+app.include_router(documents.router, prefix="/api", tags=["documents"], dependencies=[Depends(get_current_user)])
+app.include_router(reports.router, prefix="/api", tags=["reports"], dependencies=[Depends(get_current_user)])
+# Phase 4 routers — protected
+app.include_router(regulatory.router, prefix="/api", tags=["regulatory"], dependencies=[Depends(get_current_user)])
+app.include_router(scheduler.router, prefix="/api", tags=["scheduler"], dependencies=[Depends(get_current_user)])
+# Monitoring — admin only
+app.include_router(monitoring.router, prefix="/api", tags=["monitoring"], dependencies=[Depends(require_admin)])
 
 
 # ---------------------------------------------------------------------------
