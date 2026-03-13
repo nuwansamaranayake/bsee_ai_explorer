@@ -1,5 +1,13 @@
 import { useState } from "react"
-import { FileText, Download, ExternalLink, Loader2, AlertCircle } from "lucide-react"
+import {
+  FileText,
+  Download,
+  ExternalLink,
+  Loader2,
+  AlertCircle,
+  CheckCircle2,
+  ClipboardList,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
@@ -15,6 +23,7 @@ import { useOperator } from "@/contexts/OperatorContext"
 import { useOperators } from "@/hooks/useOperators"
 
 const API_BASE = import.meta.env.VITE_API_URL || ""
+const TOKEN_KEY = "beacon_token"
 
 const YEARS = Array.from({ length: 11 }, (_, i) => 2014 + i) // 2014-2024
 
@@ -39,16 +48,25 @@ export default function Reports() {
   const [includeAI, setIncludeAI] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
   const [recentReports, setRecentReports] = useState<RecentReport[]>([])
 
   const handleGenerate = async () => {
     setGenerating(true)
     setError(null)
+    setSuccess(null)
 
     try {
+      // Inject auth token for protected endpoint
+      const token = sessionStorage.getItem(TOKEN_KEY)
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      }
+      if (token) headers.Authorization = `Bearer ${token}`
+
       const response = await fetch(`${API_BASE}/api/reports/generate`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           operator: operator || null,
           year_start: yearStart ? parseInt(yearStart) : null,
@@ -57,11 +75,24 @@ export default function Reports() {
         }),
       })
 
+      // Handle 401 — redirect to login
+      if (response.status === 401) {
+        sessionStorage.removeItem(TOKEN_KEY)
+        sessionStorage.removeItem("beacon_user")
+        window.location.href = "/login"
+        return
+      }
+
       if (!response.ok) {
         const errData = await response.json().catch(() => ({
-          error: "Report generation failed",
+          error: "Report generation failed. Please try again.",
         }))
-        throw new Error(errData.detail?.detail || errData.detail || errData.error)
+        throw new Error(
+          errData.detail?.detail ||
+          errData.detail ||
+          errData.error ||
+          "Report generation failed. Please try again."
+        )
       }
 
       const blob = await response.blob()
@@ -89,8 +120,10 @@ export default function Reports() {
         },
         ...prev,
       ])
+
+      setSuccess(`Report "${filename}" generated and downloaded.`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to generate report")
+      setError(err instanceof Error ? err.message : "Failed to generate report. Please try again.")
     } finally {
       setGenerating(false)
     }
@@ -219,16 +252,37 @@ export default function Reports() {
               {error}
             </div>
           )}
+
+          {/* Success */}
+          {success && (
+            <div className="flex items-center gap-2 rounded-lg border border-green-500/50 bg-green-500/10 p-3 text-sm text-green-700 dark:text-green-400">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              {success}
+            </div>
+          )}
         </CardContent>
       </Card>
 
       {/* Recent reports */}
-      {recentReports.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Reports</CardTitle>
-          </CardHeader>
-          <CardContent>
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Reports</CardTitle>
+          <CardDescription>
+            Reports generated during this session. Downloads are available until you close the tab.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {recentReports.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-3">
+                <ClipboardList className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <p className="text-sm font-medium">No reports generated yet</p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-[280px]">
+                Configure the options above and click Generate Report to create your first PDF briefing.
+              </p>
+            </div>
+          ) : (
             <div className="space-y-3">
               {recentReports.map((report, i) => (
                 <div key={i} className="flex items-center justify-between p-3 rounded-lg border">
@@ -267,9 +321,9 @@ export default function Reports() {
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }
