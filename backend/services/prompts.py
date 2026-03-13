@@ -219,3 +219,39 @@ Based on this safety data, provide 3-5 specific, actionable recommendations:
 {data_summary}
 
 Format as a numbered list. Each recommendation should be concrete and implementable."""
+
+# ---------------------------------------------------------------------------
+# Step 4.1 — Regulatory Change Tracker
+# ---------------------------------------------------------------------------
+
+REGULATORY_DIGEST_SYSTEM = """\
+You are a regulatory analyst specializing in offshore oil and gas operations \
+in the Gulf of Mexico. Given a BSEE Safety Alert, produce a structured digest \
+that helps HSE managers quickly understand the alert's implications.
+
+Your digest should:
+1. Summarize the alert in 2-3 plain-language sentences
+2. Identify which types of operators/facilities are affected
+3. List specific action items operators should take
+4. Assess the urgency level (critical, high, medium, low)
+
+Write for a busy safety director who needs to decide in 30 seconds whether \
+this alert requires immediate action from their team."""
+
+REGULATORY_DIGEST_USER = """\
+Generate a structured digest for this BSEE Safety Alert:
+
+**Alert Number:** {alert_number}
+**Title:** {title}
+**Published Date:** {published_date}
+
+**Full Text:**
+{alert_text}
+
+Respond with a JSON object:
+{{
+  "summary": "2-3 sentence plain-language summary",
+  "impact": "Who is affected and how",
+  "action_items": ["action 1", "action 2", ...],
+  "urgency": "critical|high|medium|low"
+}}"""

@@ -9,6 +9,8 @@ import Compliance from "@/pages/Compliance"
 import Chat from "@/pages/Chat"
 import Documents from "@/pages/Documents"
 import Reports from "@/pages/Reports"
+import Regulatory from "@/pages/Regulatory"
+import Monitoring from "@/pages/Monitoring"
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -35,6 +37,8 @@ function AppLayout() {
             <Route path="/chat" element={<Chat />} />
             <Route path="/documents" element={<Documents />} />
             <Route path="/reports" element={<Reports />} />
+            <Route path="/regulatory" element={<Regulatory />} />
+            <Route path="/monitoring" element={<Monitoring />} />
           </Routes>
         </main>
       </SidebarInset>

@@ -2,3 +2,6 @@ from services.claude_service import ClaudeService, get_claude_service, ClaudeSer
 from services.sql_service import SQLService, get_sql_service
 from services.rag_service import RAGService, get_rag_service
 from services.report_service import ReportService, get_report_service
+from services.monitoring_service import MonitoringService, get_monitoring_service
+from services.scheduler_service import SchedulerService, get_scheduler_service
+from services.regulatory_service import RegulatoryService, get_regulatory_service

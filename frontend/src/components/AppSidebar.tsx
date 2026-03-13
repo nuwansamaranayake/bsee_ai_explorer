@@ -9,6 +9,8 @@ import {
   Sun,
   Moon,
   Monitor,
+  AlertTriangle,
+  Activity,
 } from "lucide-react"
 import {
   Sidebar,
@@ -31,6 +33,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { OperatorSelector } from "@/components/OperatorSelector"
+import { DataFreshness } from "@/components/DataFreshness"
 import { useEffect, useState } from "react"
 
 const navItems = [
@@ -39,6 +42,8 @@ const navItems = [
   { title: "AI Chat", path: "/chat", icon: MessageSquare },
   { title: "Documents", path: "/documents", icon: FileSearch },
   { title: "Reports", path: "/reports", icon: FileText },
+  { title: "Regulatory", path: "/regulatory", icon: AlertTriangle },
+  { title: "Monitoring", path: "/monitoring", icon: Activity },
 ]
 
 type Theme = "light" | "dark" | "system"
@@ -91,6 +96,10 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        <SidebarSeparator />
+        <div className="px-2 py-1">
+          <DataFreshness />
+        </div>
       </SidebarContent>
 
       <SidebarFooter>
