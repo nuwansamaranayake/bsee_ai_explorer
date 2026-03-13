@@ -40,8 +40,8 @@ services:
       test: ["CMD", "python", "-c", "import httpx; r=httpx.get('http://localhost:8000/health'); r.raise_for_status(); d=r.json(); print(f'v{d[\"version\"]} ai={d[\"ai_available\"]}')"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 15s
+      retries: 5
+      start_period: 60s
     restart: unless-stopped
 
 volumes:

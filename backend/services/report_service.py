@@ -40,12 +40,21 @@ from services.prompts import (
 
 logger = logging.getLogger(__name__)
 
+# Brand assets
+LOGO_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "beacon_gom_logo_light.png")
+
+# Brand colors
+BRAND_NAVY = "#0A1628"
+BRAND_TEAL = "#0891B2"
+BRAND_TEAL_LIGHT = "#22D3EE"
+BRAND_SLATE = "#64748B"
+
 # Chart styling
 CHART_COLORS = {
-    "primary": "#2563eb",
+    "primary": BRAND_TEAL,
     "secondary": "#dc2626",
     "tertiary": "#059669",
-    "gray": "#6b7280",
+    "gray": BRAND_SLATE,
 }
 plt.style.use("seaborn-v0_8-whitegrid")
 
@@ -327,16 +336,17 @@ class ReportService:
         doc = SimpleDocTemplate(
             pdf_buf, pagesize=letter,
             leftMargin=0.75 * inch, rightMargin=0.75 * inch,
-            topMargin=0.75 * inch, bottomMargin=0.75 * inch,
+            topMargin=1.2 * inch, bottomMargin=0.75 * inch,
         )
 
         styles = getSampleStyleSheet()
         styles.add(ParagraphStyle(
             name="CoverTitle",
             parent=styles["Title"],
-            fontSize=24,
-            leading=30,
+            fontSize=26,
+            leading=32,
             spaceAfter=20,
+            textColor=colors.HexColor(BRAND_NAVY),
         ))
         styles.add(ParagraphStyle(
             name="CoverSubtitle",
@@ -344,7 +354,7 @@ class ReportService:
             fontSize=14,
             leading=18,
             spaceAfter=10,
-            textColor=colors.HexColor("#6b7280"),
+            textColor=colors.HexColor(BRAND_SLATE),
         ))
         styles.add(ParagraphStyle(
             name="SectionTitle",
@@ -353,6 +363,7 @@ class ReportService:
             leading=22,
             spaceBefore=20,
             spaceAfter=10,
+            textColor=colors.HexColor(BRAND_NAVY),
         ))
         styles.add(ParagraphStyle(
             name="BodyText2",
@@ -360,17 +371,91 @@ class ReportService:
             fontSize=10,
             leading=14,
             spaceAfter=8,
+            textColor=colors.HexColor("#1E293B"),
         ))
+
+        # Page header/footer callbacks for branding
+        logo_path = LOGO_PATH if os.path.exists(LOGO_PATH) else None
+
+        def _on_first_page(canvas, doc):
+            """Draw branded header on the cover page."""
+            canvas.saveState()
+            if logo_path:
+                canvas.drawImage(
+                    logo_path,
+                    0.75 * inch, letter[1] - 0.85 * inch,
+                    width=2 * inch, height=0.5 * inch,
+                    preserveAspectRatio=True, anchor="sw",
+                    mask="auto",
+                )
+            else:
+                # Fallback text-only branding
+                canvas.setFont("Helvetica-Bold", 12)
+                canvas.setFillColor(colors.HexColor(BRAND_NAVY))
+                canvas.drawString(0.75 * inch, letter[1] - 0.6 * inch, "BEACON GoM")
+
+            # Tagline to the right of logo
+            canvas.setFont("Helvetica", 8)
+            canvas.setFillColor(colors.HexColor(BRAND_SLATE))
+            canvas.drawString(
+                2.9 * inch, letter[1] - 0.63 * inch,
+                "AI Safety & Regulatory Intelligence",
+            )
+            # Top accent line
+            canvas.setStrokeColor(colors.HexColor(BRAND_TEAL))
+            canvas.setLineWidth(2)
+            canvas.line(0.75 * inch, letter[1] - 0.92 * inch,
+                        letter[0] - 0.75 * inch, letter[1] - 0.92 * inch)
+
+            # Footer
+            canvas.setFont("Helvetica", 7)
+            canvas.setFillColor(colors.HexColor(BRAND_SLATE))
+            canvas.drawCentredString(
+                letter[0] / 2, 0.4 * inch,
+                "Beacon GoM — gomsafety.aigniteconsulting.ai — Confidential",
+            )
+            canvas.restoreState()
+
+        def _on_later_pages(canvas, doc):
+            """Draw branded header on subsequent pages."""
+            canvas.saveState()
+            if logo_path:
+                canvas.drawImage(
+                    logo_path,
+                    0.75 * inch, letter[1] - 0.7 * inch,
+                    width=1.4 * inch, height=0.35 * inch,
+                    preserveAspectRatio=True, anchor="sw",
+                    mask="auto",
+                )
+            else:
+                canvas.setFont("Helvetica-Bold", 9)
+                canvas.setFillColor(colors.HexColor(BRAND_NAVY))
+                canvas.drawString(0.75 * inch, letter[1] - 0.5 * inch, "BEACON GoM")
+
+            # Thin accent line
+            canvas.setStrokeColor(colors.HexColor(BRAND_TEAL))
+            canvas.setLineWidth(0.75)
+            canvas.line(0.75 * inch, letter[1] - 0.78 * inch,
+                        letter[0] - 0.75 * inch, letter[1] - 0.78 * inch)
+
+            # Page number footer
+            canvas.setFont("Helvetica", 7)
+            canvas.setFillColor(colors.HexColor(BRAND_SLATE))
+            canvas.drawCentredString(
+                letter[0] / 2, 0.4 * inch,
+                f"Page {doc.page} — Beacon GoM",
+            )
+            canvas.restoreState()
 
         story = []
 
         # --- Cover page ---
-        story.append(Spacer(1, 2 * inch))
+        story.append(Spacer(1, 1.5 * inch))
         story.append(Paragraph(
             "Gulf of Mexico<br/>Safety Intelligence Report",
             styles["CoverTitle"],
         ))
-        story.append(HRFlowable(width="80%", color=colors.HexColor("#2563eb")))
+        story.append(HRFlowable(width="80%", color=colors.HexColor(BRAND_TEAL)))
         story.append(Spacer(1, 0.3 * inch))
 
         op_label = operator or "GoM-Wide"
@@ -420,7 +505,7 @@ class ReportService:
 
             t = Table(table_data, colWidths=[2 * inch, 2 * inch])
             t.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2563eb")),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(BRAND_TEAL)),
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
                 ("FONTSIZE", (0, 0), (-1, 0), 10),
                 ("FONTSIZE", (0, 1), (-1, -1), 9),
@@ -477,8 +562,8 @@ class ReportService:
             styles["BodyText2"],
         ))
 
-        # Build PDF
-        doc.build(story)
+        # Build PDF with branded page templates
+        doc.build(story, onFirstPage=_on_first_page, onLaterPages=_on_later_pages)
         pdf_buf.seek(0)
         return pdf_buf.getvalue()
 

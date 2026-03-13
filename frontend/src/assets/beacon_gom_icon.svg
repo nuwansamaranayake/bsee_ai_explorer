@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="towerGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#22D3EE"/>
+      <stop offset="100%" stop-color="#0891B2"/>
+    </linearGradient>
+    <linearGradient id="glowGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#22D3EE" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#0891B2" stop-opacity="0.3"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="256.0" cy="256.0" r="226.0" fill="#0A1628"/>
+  
+  <!-- Light rays emanating from beacon top -->
+  <!-- Left ray -->
+  <polygon points="248.0,112.64 171.0,61.44 181.0,40.96" 
+           fill="#22D3EE" opacity="0.35"/>
+  <!-- Right ray -->
+  <polygon points="264.0,112.64 341.0,61.44 331.0,40.96" 
+           fill="#22D3EE" opacity="0.35"/>
+  <!-- Upper left ray -->
+  <polygon points="244.0,102.4 146.0,92.16 156.0,71.68" 
+           fill="#22D3EE" opacity="0.2"/>
+  <!-- Upper right ray -->
+  <polygon points="268.0,102.4 366.0,92.16 356.0,71.68" 
+           fill="#22D3EE" opacity="0.2"/>
+  
+  <!-- Beacon light glow -->
+  <circle cx="256.0" cy="112.64" r="22" fill="#22D3EE" opacity="0.15"/>
+  <circle cx="256.0" cy="112.64" r="14" fill="#22D3EE" opacity="0.3"/>
+  <circle cx="256.0" cy="112.64" r="8" fill="#FFFFFF" opacity="0.9"/>
+  
+  <!-- Lighthouse tower — tapered rectangle -->
+  <polygon points="224.0,133.12 288.0,133.12 304.0,368.64 208.0,368.64" 
+           fill="url(#towerGrad)"/>
+  
+  <!-- Tower horizontal bands -->
+  <rect x="220.0" y="184.32" width="72" height="4" rx="2" fill="#0A1628" opacity="0.3"/>
+  <rect x="216.0" y="245.76" width="80" height="4" rx="2" fill="#0A1628" opacity="0.3"/>
+  <rect x="212.0" y="307.2" width="88" height="4" rx="2" fill="#0A1628" opacity="0.3"/>
+  
+  <!-- Tower top cap -->
+  <polygon points="220.0,133.12 292.0,133.12 284.0,112.64 228.0,112.64" 
+           fill="#0891B2" opacity="0.8"/>
+  
+  <!-- Base platform -->
+  <rect x="191.0" y="368.64" width="130" height="10" rx="3" fill="#0891B2"/>
+  
+  <!-- Water waves below base -->
+  <path d="M136.0,409.6 Q166.0,389.12 196.0,409.6 Q226.0,430.08 256.0,409.6 Q286.0,389.12 316.0,409.6 Q346.0,430.08 376.0,409.6" 
+        fill="none" stroke="#22D3EE" stroke-width="3" opacity="0.4"/>
+  <path d="M146.0,435.2 Q176.0,414.72 206.0,435.2 Q236.0,455.68 266.0,435.2 Q296.0,414.72 326.0,435.2 Q356.0,455.68 366.0,435.2" 
+        fill="none" stroke="#22D3EE" stroke-width="2.5" opacity="0.25"/>
+</svg>

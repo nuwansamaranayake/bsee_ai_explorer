@@ -5,7 +5,6 @@ import {
   MessageSquare,
   FileSearch,
   FileText,
-  Radar,
   Sun,
   Moon,
   Monitor,
@@ -24,6 +23,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarSeparator,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import {
   DropdownMenu,
@@ -35,6 +35,10 @@ import { Button } from "@/components/ui/button"
 import { OperatorSelector } from "@/components/OperatorSelector"
 import { DataFreshness } from "@/components/DataFreshness"
 import { useEffect, useState } from "react"
+
+// Brand assets — Vite resolves these to hashed URLs at build time
+import logoDark from "@/assets/beacon_gom_logo_dark.png"
+import iconSvg from "@/assets/beacon_gom_icon.svg"
 
 const navItems = [
   { title: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
@@ -50,7 +54,9 @@ type Theme = "light" | "dark" | "system"
 
 export function AppSidebar() {
   const location = useLocation()
+  const { state } = useSidebar()
   const [theme, setTheme] = useState<Theme>("system")
+  const isCollapsed = state === "collapsed"
 
   useEffect(() => {
     const root = document.documentElement
@@ -67,10 +73,32 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader>
-        <div className="flex items-center gap-2 px-2 py-2">
-          <Radar className="h-6 w-6 text-primary" />
-          <span className="text-lg font-semibold">Beacon GoM</span>
-        </div>
+        {/* Branded logo header */}
+        <Link
+          to="/dashboard"
+          className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md"
+        >
+          {isCollapsed ? (
+            /* Collapsed: show only the icon mark */
+            <div className="flex items-center justify-center py-2">
+              <img
+                src={iconSvg}
+                alt="Beacon GoM"
+                className="h-8 w-8"
+              />
+            </div>
+          ) : (
+            /* Expanded: show full logo with navy background */
+            <div className="rounded-lg overflow-hidden mx-1 my-1">
+              <img
+                src={logoDark}
+                alt="Beacon GoM — AI Safety & Regulatory Intelligence"
+                className="w-full h-auto"
+                style={{ maxWidth: "180px" }}
+              />
+            </div>
+          )}
+        </Link>
         <SidebarSeparator />
         <OperatorSelector />
       </SidebarHeader>

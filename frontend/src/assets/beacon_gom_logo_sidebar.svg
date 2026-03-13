@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" width="800" height="200">
+  <defs>
+    <linearGradient id="towerGradS" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#22D3EE"/>
+      <stop offset="100%" stop-color="#0891B2"/>
+    </linearGradient>
+  </defs>
+
+  <!-- === ICON (no background) === -->
+  <g transform="translate(15, 15) scale(0.33)">
+    <circle cx="256" cy="256" r="230" fill="#0D2847"/>
+    <polygon points="248,113 171,61 181,41" fill="#22D3EE" opacity="0.35"/>
+    <polygon points="264,113 341,61 331,41" fill="#22D3EE" opacity="0.35"/>
+    <polygon points="244,102 146,92 156,72" fill="#22D3EE" opacity="0.2"/>
+    <polygon points="268,102 366,92 356,72" fill="#22D3EE" opacity="0.2"/>
+    <circle cx="256" cy="113" r="22" fill="#22D3EE" opacity="0.15"/>
+    <circle cx="256" cy="113" r="14" fill="#22D3EE" opacity="0.3"/>
+    <circle cx="256" cy="113" r="8" fill="#FFFFFF" opacity="0.9"/>
+    <polygon points="224,133 288,133 304,368 208,368" fill="url(#towerGradS)"/>
+    <rect x="220" y="184" width="72" height="4" rx="2" fill="#0A1628" opacity="0.3"/>
+    <rect x="216" y="246" width="80" height="4" rx="2" fill="#0A1628" opacity="0.3"/>
+    <rect x="212" y="307" width="88" height="4" rx="2" fill="#0A1628" opacity="0.3"/>
+    <polygon points="220,133 292,133 284,113 228,113" fill="#0891B2" opacity="0.8"/>
+    <rect x="191" y="368" width="130" height="10" rx="3" fill="#0891B2"/>
+    <path d="M136,410 Q166,394 196,410 Q226,426 256,410 Q286,394 316,410 Q346,426 376,410" fill="none" stroke="#22D3EE" stroke-width="3" opacity="0.4"/>
+    <path d="M146,435 Q176,419 206,435 Q236,451 266,435 Q296,419 326,435 Q356,451 366,435" fill="none" stroke="#22D3EE" stroke-width="2.5" opacity="0.25"/>
+  </g>
+
+  <!-- TEXT -->
+  <text x="205" y="105" font-family="Trebuchet MS, Arial, sans-serif" font-size="68" font-weight="bold" fill="currentColor" letter-spacing="6">BEACON</text>
+  <text x="565" y="105" font-family="Trebuchet MS, Arial, sans-serif" font-size="68" font-weight="bold" fill="#22D3EE" letter-spacing="3">GoM</text>
+  <text x="207" y="140" font-family="Calibri, Arial, sans-serif" font-size="17" fill="#64748B" letter-spacing="4">AI SAFETY &amp; REGULATORY INTELLIGENCE</text>
+</svg>
