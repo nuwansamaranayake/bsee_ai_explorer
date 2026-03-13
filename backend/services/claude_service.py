@@ -176,6 +176,18 @@ class ClaudeService:
             output_tokens = response.usage.completion_tokens if response.usage else 0
             token_tracker.record(input_tokens, output_tokens)
 
+            # Record in monitoring service
+            try:
+                from services.monitoring_service import get_monitoring_service
+                get_monitoring_service().record_tokens(
+                    model=self.model,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    endpoint="ai_call",
+                )
+            except Exception:
+                pass  # Monitoring must never break AI calls
+
             logger.info(
                 "AI API call | provider=%s | model=%s | input_tokens=%d | output_tokens=%d | latency_ms=%d | status=success",
                 self._provider, self.model, input_tokens, output_tokens, latency_ms,
