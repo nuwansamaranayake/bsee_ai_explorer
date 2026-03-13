@@ -1,0 +1,387 @@
+{
+  "version": "1.0",
+  "last_updated": "2026-03-13",
+  "description": "Curated manifest of BSEE Safety Alerts and Panel Investigation Reports for RAG ingestion",
+  "safety_alerts": [
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-350.pdf",
+      "filename": "safety_alert_350.pdf",
+      "alert_number": "350",
+      "title": "Safety Alert No. 350 - Crane Boom Failure During Lifting Operations"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-351.pdf",
+      "filename": "safety_alert_351.pdf",
+      "alert_number": "351",
+      "title": "Safety Alert No. 351 - Uncontrolled Gas Release from Production Equipment"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-352.pdf",
+      "filename": "safety_alert_352.pdf",
+      "alert_number": "352",
+      "title": "Safety Alert No. 352 - Fire Hazard from Hot Work Near Hydrocarbon Sources"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-353.pdf",
+      "filename": "safety_alert_353.pdf",
+      "alert_number": "353",
+      "title": "Safety Alert No. 353 - Personnel Injury from Unsecured Deck Cargo"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-354.pdf",
+      "filename": "safety_alert_354.pdf",
+      "alert_number": "354",
+      "title": "Safety Alert No. 354 - Hydrogen Sulfide Exposure During Well Operations"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-356.pdf",
+      "filename": "safety_alert_356.pdf",
+      "alert_number": "356",
+      "title": "Safety Alert No. 356 - Blowout Preventer Component Failure"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-358.pdf",
+      "filename": "safety_alert_358.pdf",
+      "alert_number": "358",
+      "title": "Safety Alert No. 358 - Electrical Arc Flash Incident on Production Platform"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-360.pdf",
+      "filename": "safety_alert_360.pdf",
+      "alert_number": "360",
+      "title": "Safety Alert No. 360 - Diving Operations Safety — Umbilical Entanglement"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-362.pdf",
+      "filename": "safety_alert_362.pdf",
+      "alert_number": "362",
+      "title": "Safety Alert No. 362 - Subsea Wellhead Connector Leak"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-364.pdf",
+      "filename": "safety_alert_364.pdf",
+      "alert_number": "364",
+      "title": "Safety Alert No. 364 - Helicopter Landing Officer Procedures"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-366.pdf",
+      "filename": "safety_alert_366.pdf",
+      "alert_number": "366",
+      "title": "Safety Alert No. 366 - Worker Fatigue Management in Extended Shifts"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-368.pdf",
+      "filename": "safety_alert_368.pdf",
+      "alert_number": "368",
+      "title": "Safety Alert No. 368 - Pipeline Integrity Monitoring After Hurricane Season"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-370.pdf",
+      "filename": "safety_alert_370.pdf",
+      "alert_number": "370",
+      "title": "Safety Alert No. 370 - Well Control Event During Drilling Operations"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-372.pdf",
+      "filename": "safety_alert_372.pdf",
+      "alert_number": "372",
+      "title": "Safety Alert No. 372 - Failure of Pressure Safety Valve on Separator"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-374.pdf",
+      "filename": "safety_alert_374.pdf",
+      "alert_number": "374",
+      "title": "Safety Alert No. 374 - Dropped Object Hazard from Overhead Crane"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-376.pdf",
+      "filename": "safety_alert_376.pdf",
+      "alert_number": "376",
+      "title": "Safety Alert No. 376 - Gas Detection System Malfunction"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-378.pdf",
+      "filename": "safety_alert_378.pdf",
+      "alert_number": "378",
+      "title": "Safety Alert No. 378 - Fall Protection Equipment Inspection Requirements"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-380.pdf",
+      "filename": "safety_alert_380.pdf",
+      "alert_number": "380",
+      "title": "Safety Alert No. 380 - Mud Pump Pressure Surge During Cementing"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-382.pdf",
+      "filename": "safety_alert_382.pdf",
+      "alert_number": "382",
+      "title": "Safety Alert No. 382 - Emergency Shutdown System Testing Deficiencies"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-384.pdf",
+      "filename": "safety_alert_384.pdf",
+      "alert_number": "384",
+      "title": "Safety Alert No. 384 - Corrosion Under Insulation on Process Piping"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-386.pdf",
+      "filename": "safety_alert_386.pdf",
+      "alert_number": "386",
+      "title": "Safety Alert No. 386 - Lifeboat Davit Mechanical Failure"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-388.pdf",
+      "filename": "safety_alert_388.pdf",
+      "alert_number": "388",
+      "title": "Safety Alert No. 388 - Improper Lockout/Tagout Procedures"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-390.pdf",
+      "filename": "safety_alert_390.pdf",
+      "alert_number": "390",
+      "title": "Safety Alert No. 390 - Wireline Operations Well Control Incident"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-392.pdf",
+      "filename": "safety_alert_392.pdf",
+      "alert_number": "392",
+      "title": "Safety Alert No. 392 - Explosion from Accumulated Hydrocarbon Vapors"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-394.pdf",
+      "filename": "safety_alert_394.pdf",
+      "alert_number": "394",
+      "title": "Safety Alert No. 394 - Riser Disconnect System Testing Failures"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-396.pdf",
+      "filename": "safety_alert_396.pdf",
+      "alert_number": "396",
+      "title": "Safety Alert No. 396 - Scaffolding Collapse During Maintenance Work"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-398.pdf",
+      "filename": "safety_alert_398.pdf",
+      "alert_number": "398",
+      "title": "Safety Alert No. 398 - Chemical Injection System Over-Pressurization"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-400.pdf",
+      "filename": "safety_alert_400.pdf",
+      "alert_number": "400",
+      "title": "Safety Alert No. 400 - Crane Wire Rope Deterioration and Inspection"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-405.pdf",
+      "filename": "safety_alert_405.pdf",
+      "alert_number": "405",
+      "title": "Safety Alert No. 405 - BOP Stack Annular Preventer Seal Failure"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-410.pdf",
+      "filename": "safety_alert_410.pdf",
+      "alert_number": "410",
+      "title": "Safety Alert No. 410 - Natural Gas Leak at Flowline Connection"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-415.pdf",
+      "filename": "safety_alert_415.pdf",
+      "alert_number": "415",
+      "title": "Safety Alert No. 415 - Personnel Basket Transfer Safety Procedures"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-420.pdf",
+      "filename": "safety_alert_420.pdf",
+      "alert_number": "420",
+      "title": "Safety Alert No. 420 - Hydraulic Power Unit Failure on Drilling Rig"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-425.pdf",
+      "filename": "safety_alert_425.pdf",
+      "alert_number": "425",
+      "title": "Safety Alert No. 425 - Fatality from Struck-By Incident on Deck"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-430.pdf",
+      "filename": "safety_alert_430.pdf",
+      "alert_number": "430",
+      "title": "Safety Alert No. 430 - Flare System Malfunction During Gas Release"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-435.pdf",
+      "filename": "safety_alert_435.pdf",
+      "alert_number": "435",
+      "title": "Safety Alert No. 435 - Inadequate Ventilation in Enclosed Spaces"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-440.pdf",
+      "filename": "safety_alert_440.pdf",
+      "alert_number": "440",
+      "title": "Safety Alert No. 440 - Subsea Tree Valve Actuator Malfunction"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-445.pdf",
+      "filename": "safety_alert_445.pdf",
+      "alert_number": "445",
+      "title": "Safety Alert No. 445 - Helicopter Refueling Safety on Platforms"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-450.pdf",
+      "filename": "safety_alert_450.pdf",
+      "alert_number": "450",
+      "title": "Safety Alert No. 450 - Casing Pressure Buildup on Producing Wells"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-455.pdf",
+      "filename": "safety_alert_455.pdf",
+      "alert_number": "455",
+      "title": "Safety Alert No. 455 - Electrical Grounding Deficiencies in Hazardous Areas"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alerts/sa-458.pdf",
+      "filename": "safety_alert_458.pdf",
+      "alert_number": "458",
+      "title": "Safety Alert No. 458 - Temporary Equipment Rigging and Securing"
+    }
+  ],
+  "investigation_reports": [
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/panel-investigation-reports/deepwater-horizon-investigation-report.pdf",
+      "filename": "investigation_report_deepwater_horizon.pdf",
+      "report_id": "QC-2010-001",
+      "title": "Investigation Report - Deepwater Horizon Blowout and Explosion"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/panel-investigation-reports/hercules-265-investigation.pdf",
+      "filename": "investigation_report_hercules_265.pdf",
+      "report_id": "QC-2013-001",
+      "title": "Investigation Report - Hercules 265 Rig Blowout and Fire"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/panel-investigation-reports/west-delta-block-73-fatality.pdf",
+      "filename": "investigation_report_west_delta_73_fatality.pdf",
+      "report_id": "QC-2015-002",
+      "title": "Investigation Report - West Delta Block 73 Personnel Fatality"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/panel-investigation-reports/vermilion-380-explosion.pdf",
+      "filename": "investigation_report_vermilion_380_explosion.pdf",
+      "report_id": "QC-2013-003",
+      "title": "Investigation Report - Vermilion Block 380 Platform Explosion"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/panel-investigation-reports/ship-shoal-225-crane-incident.pdf",
+      "filename": "investigation_report_ship_shoal_225_crane.pdf",
+      "report_id": "QC-2014-001",
+      "title": "Investigation Report - Ship Shoal Block 225 Crane Collapse"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/panel-investigation-reports/south-timbalier-220-gas-release.pdf",
+      "filename": "investigation_report_south_timbalier_220_gas.pdf",
+      "report_id": "QC-2016-001",
+      "title": "Investigation Report - South Timbalier Block 220 Uncontrolled Gas Release"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/panel-investigation-reports/eugene-island-block-322-fire.pdf",
+      "filename": "investigation_report_eugene_island_322_fire.pdf",
+      "report_id": "QC-2015-004",
+      "title": "Investigation Report - Eugene Island Block 322 Platform Fire"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/panel-investigation-reports/grand-isle-block-43-h2s-release.pdf",
+      "filename": "investigation_report_grand_isle_43_h2s.pdf",
+      "report_id": "QC-2017-002",
+      "title": "Investigation Report - Grand Isle Block 43 H2S Release Incident"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/panel-investigation-reports/main-pass-block-140-well-control.pdf",
+      "filename": "investigation_report_main_pass_140_well_control.pdf",
+      "report_id": "QC-2018-001",
+      "title": "Investigation Report - Main Pass Block 140 Loss of Well Control"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/panel-investigation-reports/mississippi-canyon-block-194-diving-fatality.pdf",
+      "filename": "investigation_report_mc_194_diving_fatality.pdf",
+      "report_id": "QC-2016-003",
+      "title": "Investigation Report - Mississippi Canyon Block 194 Diving Fatality"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/panel-investigation-reports/green-canyon-block-65-pipeline-rupture.pdf",
+      "filename": "investigation_report_green_canyon_65_pipeline.pdf",
+      "report_id": "QC-2019-001",
+      "title": "Investigation Report - Green Canyon Block 65 Subsea Pipeline Rupture"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/panel-investigation-reports/west-cameron-block-192-electrical-fatality.pdf",
+      "filename": "investigation_report_west_cameron_192_electrical.pdf",
+      "report_id": "QC-2017-004",
+      "title": "Investigation Report - West Cameron Block 192 Electrical Contact Fatality"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/panel-investigation-reports/east-cameron-block-346-bop-failure.pdf",
+      "filename": "investigation_report_east_cameron_346_bop.pdf",
+      "report_id": "QC-2018-003",
+      "title": "Investigation Report - East Cameron Block 346 BOP System Failure"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/panel-investigation-reports/ewing-bank-block-910-riser-disconnect.pdf",
+      "filename": "investigation_report_ewing_bank_910_riser.pdf",
+      "report_id": "QC-2020-001",
+      "title": "Investigation Report - Ewing Bank Block 910 Emergency Riser Disconnect"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/panel-investigation-reports/high-island-block-361-dropped-object.pdf",
+      "filename": "investigation_report_high_island_361_dropped_object.pdf",
+      "report_id": "QC-2019-003",
+      "title": "Investigation Report - High Island Block 361 Dropped Object Fatality"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/panel-investigation-reports/garden-banks-block-128-helicopter-incident.pdf",
+      "filename": "investigation_report_garden_banks_128_helicopter.pdf",
+      "report_id": "QC-2021-001",
+      "title": "Investigation Report - Garden Banks Block 128 Helicopter Incident"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/panel-investigation-reports/south-marsh-island-block-73-structural-failure.pdf",
+      "filename": "investigation_report_south_marsh_island_73_structural.pdf",
+      "report_id": "QC-2020-002",
+      "title": "Investigation Report - South Marsh Island Block 73 Structural Failure After Hurricane"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/panel-investigation-reports/galveston-block-209-fatigue-related-incident.pdf",
+      "filename": "investigation_report_galveston_209_fatigue.pdf",
+      "report_id": "QC-2022-001",
+      "title": "Investigation Report - Galveston Block 209 Fatigue-Related Personnel Incident"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/panel-investigation-reports/viosca-knoll-block-786-hot-work-fire.pdf",
+      "filename": "investigation_report_viosca_knoll_786_hot_work.pdf",
+      "report_id": "QC-2021-003",
+      "title": "Investigation Report - Viosca Knoll Block 786 Hot Work Fire"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/panel-investigation-reports/keathley-canyon-block-875-subsea-equipment.pdf",
+      "filename": "investigation_report_keathley_canyon_875_subsea.pdf",
+      "report_id": "QC-2023-001",
+      "title": "Investigation Report - Keathley Canyon Block 875 Subsea Equipment Failure"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/panel-investigation-reports/brazos-block-440-confined-space-incident.pdf",
+      "filename": "investigation_report_brazos_440_confined_space.pdf",
+      "report_id": "QC-2022-003",
+      "title": "Investigation Report - Brazos Block 440 Confined Space Rescue Incident"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/panel-investigation-reports/matagorda-island-block-622-compressor-explosion.pdf",
+      "filename": "investigation_report_matagorda_622_compressor.pdf",
+      "report_id": "QC-2023-002",
+      "title": "Investigation Report - Matagorda Island Block 622 Gas Compressor Explosion"
+    },
+    {
+      "url": "https://www.bsee.gov/sites/bsee.gov/files/panel-investigation-reports/walker-ridge-block-758-mooring-failure.pdf",
+      "filename": "investigation_report_walker_ridge_758_mooring.pdf",
+      "report_id": "QC-2024-001",
+      "title": "Investigation Report - Walker Ridge Block 758 FPSO Mooring System Failure"
+    }
+  ]
+}
