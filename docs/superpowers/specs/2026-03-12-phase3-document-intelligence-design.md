@@ -3,6 +3,7 @@
 **Date:** 2026-03-12
 **Scope:** Steps 3.1, 3.2, 3.3 (PDF ingestion, RAG search, PDF report export)
 **Status:** Approved
+**Review:** Passed spec review (all Critical/Important issues resolved)
 
 ---
 
@@ -23,6 +24,9 @@ Add three major features to Beacon GoM:
 | PDF generation | ReportLab + matplotlib | Battle-tested, no system deps (unlike WeasyPrint). |
 | AI provider | OpenRouter via `openai.AsyncOpenAI` | Existing pattern. All AI calls go through `ClaudeService`. |
 | Embedding provider | Local ONNX (NOT OpenRouter) | Spec requirement. No cost per ingestion run. |
+| ChromaDB sync queries | Wrapped in `asyncio.to_thread()` | ChromaDB's `collection.query()` is synchronous — must not block the event loop. |
+| Report endpoint verb | POST (not GET) | Report generation has side effects (AI calls, resource consumption). Consistent with `/api/analyze/trends`. |
+| DB access in ReportService | Raw `sqlite3`/`pandas.read_sql` | Chart data needs aggregate queries easier in raw SQL than ORM. Explicit departure from ORM pattern. |
 
 ## 3. Step 3.1 — PDF Download & Ingestion Pipeline
 
@@ -30,7 +34,7 @@ Add three major features to Beacon GoM:
 
 | File | Purpose |
 |---|---|
-| `backend/etl/pdf_manifest.json` | Curated list of BSEE PDF URLs |
+| `backend/etl/pdf_manifest.json` | Curated list of BSEE PDF URLs with version field |
 | `backend/etl/download_safety_alerts.py` | Downloads PDFs from manifest |
 | `backend/etl/ingest_pdfs.py` | Replaces stub. Full ingestion pipeline. |
 
@@ -38,6 +42,8 @@ Add three major features to Beacon GoM:
 
 ```json
 {
+  "version": "1.0",
+  "last_updated": "2026-03-12",
   "safety_alerts": [
     {
       "url": "https://www.bsee.gov/sites/bsee.gov/files/safety-alert/...",
@@ -75,7 +81,10 @@ Add three major features to Beacon GoM:
    - Opens each PDF, extracts text page-by-page via `page.get_text()`
    - Extracts metadata: `title` (from manifest or first line), `date` (regex `\d{1,2}/\d{1,2}/\d{4}` or `\w+ \d{1,2}, \d{4}`), `doc_type` (safety_alert | investigation_report), `alert_number`, `source_file`
    - Handles malformed PDFs: log warning, skip, continue
-   - Strips common headers/footers (BSEE letterhead patterns)
+   - Strips common headers/footers using patterns:
+     - Lines matching `r"^U\.S\. Department of the Interior"` or `r"^Bureau of Safety"`
+     - Lines matching `r"^Page \d+ of \d+$"` or `r"^\d+$"` (standalone page numbers)
+     - Lines matching `r"^BSEE\s"`
 
 2. **Chunk** (LangChain):
    - `RecursiveCharacterTextSplitter(chunk_size=512, chunk_overlap=50, length_function=len)`
@@ -94,6 +103,7 @@ Add three major features to Beacon GoM:
 ### 3.1.5 Docker Integration
 
 - `start.sh` updated: after DB seed, run `python -m etl.download_safety_alerts` then `python -m etl.ingest_pdfs` (only if ChromaDB collection doesn't exist or is empty)
+- **Important:** Ingestion runs and completes BEFORE uvicorn starts. Only one process holds the ChromaDB client at a time — no concurrent access conflicts.
 - ChromaDB data persists in the `chroma_data` Docker volume
 
 ### 3.1.6 Exit Criteria
@@ -112,18 +122,26 @@ Add three major features to Beacon GoM:
 #### 4.1.1 `services/rag_service.py` (replace stub)
 
 ```python
+import asyncio
+import os
+import chromadb
+from services.claude_service import ClaudeService, get_claude_service
+
 class RAGService:
-    def __init__(self, chroma_path: str, claude_service: ClaudeService):
+    def __init__(self):
+        """Zero-arg constructor matching existing singleton pattern."""
+        chroma_path = os.getenv("CHROMA_PATH", "./data/chroma")
         self.client = chromadb.PersistentClient(path=chroma_path)
         self.collection = self.client.get_or_create_collection("bsee_documents")
-        self.claude = claude_service
+        self.claude = get_claude_service()
 
     async def search(self, query: str, top_k: int = 5,
                      doc_type: str | None = None) -> dict:
         """Full RAG pipeline: query -> retrieve -> synthesize -> cite"""
-        # 1. Query ChromaDB (semantic search)
+        # 1. Query ChromaDB (wrap sync call to avoid blocking event loop)
         where_filter = {"doc_type": doc_type} if doc_type else None
-        results = self.collection.query(
+        results = await asyncio.to_thread(
+            self.collection.query,
             query_texts=[query], n_results=top_k, where=where_filter,
             include=["documents", "metadatas", "distances"]
         )
@@ -134,10 +152,24 @@ class RAGService:
 
     def get_stats(self) -> dict:
         """Corpus statistics for the frontend stats bar."""
-        # Returns: total_documents, total_chunks, by_type counts, date_range
+        # Returns: total_documents, total_chunks, by_type counts,
+        #          oldest_document_date, newest_document_date
+
+# Singleton
+_rag_service: RAGService | None = None
+
+def get_rag_service() -> RAGService:
+    global _rag_service
+    if _rag_service is None:
+        _rag_service = RAGService()
+    return _rag_service
 ```
 
-**Singleton pattern:** `get_rag_service()` factory following existing `get_claude_service()` pattern.
+**Key design notes:**
+- Zero-arg constructor reads `CHROMA_PATH` from env (matching `ClaudeService` pattern)
+- `get_rag_service()` factory following existing `get_claude_service()` pattern
+- `search()` wraps `collection.query()` in `asyncio.to_thread()` to prevent event loop blocking
+- `get_stats()` includes `oldest_document_date` and `newest_document_date`
 
 #### 4.1.2 Prompt Templates (add to `services/prompts.py`)
 
@@ -165,40 +197,85 @@ Two endpoints:
 - `DocumentSearchResponse`: `{ answer: str, citations: list[Citation], query: str, doc_count: int, generated_at: str }`
 - `Citation`: `{ source_file: str, title: str, page_number: int, relevance_score: float, excerpt: str }`
 - Relevance score: normalized from ChromaDB distance (1 - distance, clamped to 0-1)
+- **AI availability check:** If `claude_service` is not available, return 503 with `{"error": "AI service unavailable", "detail": "No API key configured"}` (matching analyze.py pattern)
+- **Empty corpus check:** If ChromaDB collection is empty, return 404 with `{"error": "No documents indexed", "detail": "Run the ingestion pipeline first"}`
 
 **`GET /api/documents/stats`**
-- Response: `{ data: { total_documents: int, total_chunks: int, safety_alerts: int, investigation_reports: int } }`
+- Response: `{ data: { total_documents: int, total_chunks: int, safety_alerts: int, investigation_reports: int, oldest_date: str | null, newest_date: str | null } }`
 
 #### 4.1.4 Pydantic Models
 
-Add to `models/schemas.py` or define inline in the router:
+Add to `models/schemas.py`:
 - `DocumentSearchRequest`
 - `Citation`
 - `DocumentSearchResponse`
 - `DocumentStatsResponse`
+
+#### 4.1.5 Service Registration
+
+Update `backend/services/__init__.py` to export:
+```python
+from .claude_service import ClaudeService, get_claude_service
+from .sql_service import SQLService, get_sql_service
+from .rag_service import RAGService, get_rag_service
+from .report_service import ReportService, get_report_service
+```
 
 ### 4.2 Frontend
 
 #### 4.2.1 `hooks/useDocuments.ts` (new file)
 
 ```typescript
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { apiClient, type ApiResponse } from "@/lib/api";
+
+interface Citation {
+  source_file: string;
+  title: string;
+  page_number: number;
+  relevance_score: number;
+  excerpt: string;
+}
+
+interface DocumentSearchResponse {
+  answer: string;
+  citations: Citation[];
+  query: string;
+  doc_count: number;
+  generated_at: string;
+}
+
+interface DocumentStats {
+  total_documents: number;
+  total_chunks: number;
+  safety_alerts: number;
+  investigation_reports: number;
+  oldest_date: string | null;
+  newest_date: string | null;
+}
+
 // Mutation hook for document search
 export function useDocumentSearch() {
   return useMutation({
     mutationFn: (params: { query: string; top_k?: number; doc_type?: string }) =>
-      api.post('/api/documents/search', params)
+      apiClient<ApiResponse<DocumentSearchResponse>>("/api/documents/search", {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
   });
 }
 
 // Query hook for corpus stats
 export function useDocumentStats() {
   return useQuery({
-    queryKey: ['document-stats'],
-    queryFn: () => api.get('/api/documents/stats'),
+    queryKey: ["document-stats"],
+    queryFn: () => apiClient<ApiResponse<DocumentStats>>("/api/documents/stats"),
     staleTime: 5 * 60 * 1000,
   });
 }
 ```
+
+**Note:** Uses `apiClient` from `@/lib/api` (existing pattern), NOT `api.post`/`api.get`.
 
 #### 4.2.2 `pages/Documents.tsx` (replace stub)
 
@@ -207,7 +284,7 @@ Layout (top to bottom):
 2. **Search bar:** shadcn/ui Input + Button. Placeholder: "Search BSEE Safety Alerts and Investigation Reports..."
 3. **Filter row:** ToggleGroup with "All" | "Safety Alerts" | "Investigation Reports"
 4. **Stats bar:** Small text: "Searching across {doc_count} documents ({chunk_count} indexed passages)"
-5. **AI Answer panel:** Card with react-markdown rendered answer. Skeleton while loading.
+5. **AI Answer panel:** Card with react-markdown rendered answer. Skeleton while loading. (`react-markdown` already in `package.json`, used by Chat.tsx)
 6. **Citations list:** Array of CitationCard components below the answer
 7. **Empty state:** When no search run, show 5 suggested query chips:
    - "What caused the Deepwater Horizon explosion?"
@@ -241,44 +318,58 @@ Props: `{ title, pageNumber, relevanceScore, excerpt, sourceFile }`
 
 ### 5.1 New Dependencies
 
-Add to `requirements.txt`:
+**Backend** (`requirements.txt`):
 - `reportlab>=4.0`
 - `matplotlib>=3.8`
+
+**Frontend:** No new dependencies needed. `react-markdown` already present.
 
 ### 5.2 Backend
 
 #### 5.2.1 `services/report_service.py` (replace stub)
 
 ```python
+import os
+from services.claude_service import ClaudeService, get_claude_service
+
 class ReportService:
-    def __init__(self, db_path: str, claude_service: ClaudeService):
-        self.db_path = db_path
-        self.claude = claude_service
+    def __init__(self):
+        """Zero-arg constructor matching singleton pattern."""
+        self.db_path = os.getenv("DATABASE_PATH", "./data/bsee.db")
+        self.claude = get_claude_service()
 
     async def generate_report(
         self, operator: str | None, year_start: int | None,
         year_end: int | None, include_ai: bool = True
     ) -> bytes:
-        """Generate a complete PDF safety briefing."""
-        # 1. Query SQLite for filtered incident/INC/production data
-        # 2. Generate matplotlib charts as PNG BytesIO:
-        #    - Incident trend line chart
-        #    - INC severity bar chart
-        #    - Incidents per million BOE line chart
-        #    - Root cause pie chart (if data exists)
+        """Generate a complete PDF safety briefing.
+        Uses raw sqlite3/pandas for aggregate chart queries
+        (easier than ORM for chart data aggregations).
+        """
+        # 1. Query SQLite via pandas.read_sql for filtered data
+        # 2. Generate matplotlib charts as PNG BytesIO
         # 3. If include_ai: call Claude for executive summary + recommendations
         # 4. Assemble PDF with ReportLab
         # 5. Return PDF bytes
+
+# Singleton
+_report_service: ReportService | None = None
+
+def get_report_service() -> ReportService:
+    global _report_service
+    if _report_service is None:
+        _report_service = ReportService()
+    return _report_service
 ```
 
-**Singleton pattern:** `get_report_service()` factory.
+**Key design note:** Uses `pandas.read_sql` with `sqlite3` connection directly (not SQLAlchemy ORM). This is an intentional departure from the ORM pattern because chart data queries involve GROUP BY, COUNT, and pivoting that are much cleaner in raw SQL + pandas than through the ORM.
 
 #### 5.2.2 PDF Structure (ReportLab)
 
 8 sections in order:
 
 1. **Cover page:** Title "Gulf of Mexico Safety Intelligence Report", operator name (or "GoM-Wide"), date range, generation timestamp, "Powered by Beacon GoM" branding, horizontal rule
-2. **Executive Summary:** AI-written 2-3 paragraph overview (or placeholder if `include_ai=false`)
+2. **Executive Summary:** AI-written 2-3 paragraph overview (or "AI analysis not included — data-only report" if `include_ai=false`)
 3. **Incident Trends:** Matplotlib line chart (incidents by year). Summary table: year, count, YoY change
 4. **Compliance Overview:** Bar chart of INCs by severity. Text comparison to GoM average
 5. **Production-Normalized Metrics:** Line chart of incidents/million BOE. Trend direction text
@@ -293,14 +384,24 @@ class ReportService:
 - Charts rendered to `BytesIO` as PNG, embedded in PDF via ReportLab `Image()`
 - Figure size: 6.5" x 3.5" (fits letter-width PDF with margins)
 - DPI: 150 (good quality without huge file size)
+- `matplotlib.use('Agg')` for headless rendering in Docker
 
 #### 5.2.4 `routers/reports.py` (replace stub)
 
-**`GET /api/reports/generate`**
-- Query params: `operator` (optional), `year_start` (optional), `year_end` (optional), `include_ai` (bool, default true)
+**`POST /api/reports/generate`** (POST, not GET — has side effects: AI calls, resource consumption)
+- Request body:
+  ```python
+  class ReportRequest(BaseModel):
+      operator: str | None = None
+      year_start: int | None = None
+      year_end: int | None = None
+      include_ai: bool = True
+  ```
 - Returns: `StreamingResponse(content=pdf_bytes, media_type="application/pdf")`
 - `Content-Disposition: attachment; filename="beacon_gom_report_{operator}_{date}.pdf"`
-- If no data matches filters: return 404 with error message
+- **AI availability check:** If `include_ai=true` and claude is not available, return 503
+- **Empty data check:** If no data matches filters, return 404 with error message
+- **Timeout:** Claude calls wrapped with `asyncio.wait_for(coro, timeout=60)` to prevent indefinite hangs
 
 #### 5.2.5 AI Prompts for Report
 
@@ -336,7 +437,7 @@ Layout:
    - "Include AI Analysis" Switch toggle (default on)
    - "Generate Report" Button with FileText icon
 3. **Generation state:** When generating, show a Card with Loader2 spinner and text "Generating report... This may take 15-30 seconds"
-4. **Download:** When ready, trigger `window.open(url)` or create an anchor click to download. Show "Download Report" button + "Open in New Tab" link
+4. **Download:** When ready, show "Download Report" button + "Open in New Tab" link
 5. **Recent reports:** List of reports generated in this session (React state array) with re-download links
 6. **Error handling:** Toast notification if generation fails
 
@@ -345,20 +446,52 @@ Layout:
 ```typescript
 const handleGenerate = async () => {
   setGenerating(true);
-  const params = new URLSearchParams();
-  if (operator) params.set('operator', operator);
-  if (yearStart) params.set('year_start', yearStart.toString());
-  if (yearEnd) params.set('year_end', yearEnd.toString());
-  params.set('include_ai', includeAI.toString());
+  setError(null);
+  try {
+    const response = await fetch("/api/reports/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        operator: operator || null,
+        year_start: yearStart || null,
+        year_end: yearEnd || null,
+        include_ai: includeAI,
+      }),
+    });
 
-  const url = `/api/reports/generate?${params}`;
-  // Fetch as blob, create object URL, trigger download
-  const response = await fetch(url);
-  const blob = await response.blob();
-  const downloadUrl = URL.createObjectURL(blob);
-  // Trigger download via hidden anchor
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({
+        error: "Report generation failed",
+      }));
+      throw new Error(errorData.detail || errorData.error);
+    }
+
+    const blob = await response.blob();
+    const downloadUrl = URL.createObjectURL(blob);
+
+    // Trigger download via hidden anchor
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = `beacon_gom_report_${operator || "gom_wide"}_${new Date().toISOString().slice(0, 10)}.pdf`;
+    a.click();
+
+    // Cleanup
+    URL.revokeObjectURL(downloadUrl);
+
+    // Add to recent reports list
+    setRecentReports((prev) => [
+      { operator, yearStart, yearEnd, includeAI, generatedAt: new Date() },
+      ...prev,
+    ]);
+  } catch (err) {
+    setError(err instanceof Error ? err.message : "Failed to generate report");
+  } finally {
+    setGenerating(false);
+  }
 };
 ```
+
+**Note:** Uses raw `fetch` (not `apiClient`) because `apiClient` calls `response.json()` which fails on binary PDF responses. Includes full error handling, Object URL cleanup, and loading state management.
 
 ### 5.4 Exit Criteria
 
@@ -376,21 +509,20 @@ const handleGenerate = async () => {
 ### New Files
 | File | Description |
 |---|---|
-| `backend/etl/pdf_manifest.json` | Curated BSEE PDF URLs |
+| `backend/etl/pdf_manifest.json` | Curated BSEE PDF URLs with version tracking |
 | `backend/etl/download_safety_alerts.py` | PDF download script |
-| `frontend/src/hooks/useDocuments.ts` | Document search hooks |
-| `frontend/src/hooks/useReports.ts` | Report generation hooks |
+| `frontend/src/hooks/useDocuments.ts` | Document search + stats hooks |
 
 ### Replaced Stubs
 | File | From | To |
 |---|---|---|
 | `backend/etl/ingest_pdfs.py` | NotImplementedError | Full ingestion pipeline |
-| `backend/services/rag_service.py` | NotImplementedError | Full RAG service |
-| `backend/services/report_service.py` | NotImplementedError | Full PDF generation |
-| `backend/routers/documents.py` | Empty stub | Two endpoints |
-| `backend/routers/reports.py` | Empty stub | One endpoint |
+| `backend/services/rag_service.py` | NotImplementedError | Full RAG service with singleton |
+| `backend/services/report_service.py` | NotImplementedError | Full PDF generation with singleton |
+| `backend/routers/documents.py` | Empty stub | Two endpoints (search + stats) |
+| `backend/routers/reports.py` | Empty stub | One endpoint (POST generate) |
 | `frontend/src/pages/Documents.tsx` | Placeholder text | Full search UI |
-| `frontend/src/pages/Reports.tsx` | Placeholder text | Full report UI |
+| `frontend/src/pages/Reports.tsx` | Placeholder text | Full report config + download UI |
 | `frontend/src/components/CitationCard.tsx` | Empty stub | Expandable citation card |
 
 ### Modified Files
@@ -398,9 +530,10 @@ const handleGenerate = async () => {
 |---|---|
 | `backend/requirements.txt` | Add reportlab, matplotlib |
 | `backend/services/prompts.py` | Add RAG + report prompt templates |
+| `backend/services/__init__.py` | Export RAGService, ReportService singletons |
 | `backend/models/schemas.py` | Add document/report Pydantic models |
-| `backend/main.py` | Wire RAGService and ReportService singletons |
-| `backend/start.sh` | Add PDF download + ingest on first boot |
+| `backend/main.py` | Wire RAGService and ReportService, add ChromaDB to health check |
+| `backend/start.sh` | Add PDF download + ingest on first boot (before uvicorn) |
 
 ---
 
@@ -423,7 +556,7 @@ Step 3.3 only depends on the existing Phase 2 data (SQLite incidents/INCs/produc
 Each step has its own verification:
 
 - **3.1:** Run download + ingest scripts, verify ChromaDB collection size and query results
-- **3.2:** curl POST to `/api/documents/search`, verify AI answer + citations structure
-- **3.3:** curl GET to `/api/reports/generate`, verify PDF downloads and contains expected sections
+- **3.2:** curl POST to `/api/documents/search`, verify AI answer + citations structure. Verify 503 when AI unavailable. Verify empty corpus 404.
+- **3.3:** curl POST to `/api/reports/generate`, verify PDF downloads and contains expected sections. Test `include_ai=false` mode.
 
 Comprehensive test suite (Step 3.5) is deferred to the next session per scope agreement.
