@@ -20,7 +20,7 @@ async def search_documents(req: DocumentSearchRequest):
     if not claude.is_available:
         raise HTTPException(
             status_code=503,
-            detail={"error": "AI features unavailable", "detail": "No API key configured"},
+            detail={"error": "AI features are not currently available. Please try again later."},
         )
 
     rag = get_rag_service()
@@ -29,7 +29,7 @@ async def search_documents(req: DocumentSearchRequest):
     if rag.collection.count() == 0:
         raise HTTPException(
             status_code=404,
-            detail={"error": "No documents indexed", "detail": "Run the ingestion pipeline first"},
+            detail={"error": "No documents have been indexed yet. The document corpus is being prepared."},
         )
 
     try:
@@ -39,9 +39,10 @@ async def search_documents(req: DocumentSearchRequest):
             doc_type=req.doc_type,
         )
     except ClaudeServiceError as e:
+        logger.error("Document search AI error: %s", e)
         raise HTTPException(
             status_code=502,
-            detail={"error": e.error_type, "detail": e.message},
+            detail={"error": "Document search temporarily unavailable. Please try again."},
         )
 
     return {

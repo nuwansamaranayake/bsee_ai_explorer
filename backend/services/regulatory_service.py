@@ -160,8 +160,8 @@ class RegulatoryService:
 
         except Exception as e:
             db.rollback()
-            logger.error("Failed to generate digest for alert %d: %s", alert_id, e)
-            return {"error": str(e)}
+            logger.error("Failed to generate digest for alert %d: %s", alert_id, e, exc_info=True)
+            return {"error": "Digest generation failed. Please try again."}
         finally:
             db.close()
 

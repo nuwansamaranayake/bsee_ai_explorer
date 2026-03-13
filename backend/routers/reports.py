@@ -24,10 +24,7 @@ async def generate_report(req: ReportRequest):
         if not claude.is_available:
             raise HTTPException(
                 status_code=503,
-                detail={
-                    "error": "AI features unavailable",
-                    "detail": "No API key configured. Set include_ai=false for data-only report.",
-                },
+                detail={"error": "AI features are not currently available. You can still generate a data-only report by disabling AI analysis."},
             )
 
     report_svc = get_report_service()
@@ -39,13 +36,16 @@ async def generate_report(req: ReportRequest):
             year_end=req.year_end,
             include_ai=req.include_ai,
         )
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail={"error": str(e)})
+    except ValueError:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "Not enough data to generate a report for this operator and date range."},
+        )
     except Exception as e:
         logger.error("Report generation failed: %s", e, exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail={"error": "Report generation failed", "detail": str(e)},
+            detail={"error": "Report generation failed. Please try a different configuration."},
         )
 
     op_label = (req.operator or "gom_wide").lower().replace(" ", "_")

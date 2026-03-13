@@ -61,9 +61,11 @@ class SQLService:
             logger.error("Failed to load DB schema: %s", e)
             return "Schema unavailable"
 
+    # Whitelist of allowed table names — prevents any injection via table names.
+    ALLOWED_TABLES = frozenset({"incidents", "incs", "platforms", "production"})
+
     def _load_samples(self) -> str:
         """Load sample rows from each table for Claude context."""
-        tables = ["incidents", "incs", "platforms", "production"]
         samples = []
 
         try:
@@ -71,9 +73,13 @@ class SQLService:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
 
-            for table in tables:
+            for table in self.ALLOWED_TABLES:
                 try:
-                    cursor.execute(f"SELECT * FROM {table} LIMIT {SAMPLE_ROWS_COUNT}")
+                    # Table names cannot be parameterized in SQL, so we
+                    # validate against the ALLOWED_TABLES whitelist above.
+                    cursor.execute(
+                        f"SELECT * FROM [{table}] LIMIT ?", (SAMPLE_ROWS_COUNT,)
+                    )
                     rows = cursor.fetchall()
                     if rows:
                         cols = rows[0].keys()
@@ -260,11 +266,13 @@ class SQLService:
         except ClaudeServiceError as e:
             logger.error("Claude service error in chat pipeline: %s", e)
             return {
-                "answer": f"I'm sorry, I encountered an issue: {e.message}",
+                "answer": (
+                    "I'm sorry, the AI service is temporarily unavailable. "
+                    "Please try again in a moment."
+                ),
                 "sql": None,
                 "data": [],
                 "refused": False,
-                "error": e.message,
             }
         except SQLServiceError as e:
             logger.error("SQL service error: %s", e)
@@ -276,16 +284,14 @@ class SQLService:
                 "sql": None,
                 "data": [],
                 "refused": False,
-                "error": str(e),
             }
         except Exception as e:
-            logger.error("Unexpected error in chat pipeline: %s", e)
+            logger.error("Unexpected error in chat pipeline: %s", e, exc_info=True)
             return {
                 "answer": "I encountered an unexpected error. Please try again.",
                 "sql": None,
                 "data": [],
                 "refused": False,
-                "error": str(e),
             }
 
 

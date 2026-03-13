@@ -10,7 +10,7 @@ from typing import AsyncGenerator
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from services.claude_service import get_claude_service, ClaudeServiceError
 from services.sql_service import get_sql_service, SQLServiceError
@@ -19,9 +19,12 @@ from services.prompts import SQL_REFUSAL_MESSAGE
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# Maximum input length for user messages (characters)
+MAX_MESSAGE_LENGTH = 2000
+
 
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(..., min_length=1, max_length=MAX_MESSAGE_LENGTH)
     conversation_id: str | None = None  # For future multi-turn
 
 
@@ -31,10 +34,7 @@ def _check_ai_available():
     if not service.is_available:
         raise HTTPException(
             status_code=503,
-            detail={
-                "error": "AI features unavailable",
-                "detail": "ANTHROPIC_API_KEY not configured",
-            },
+            detail={"error": "AI features are not currently available. Please try again later."},
         )
 
 
@@ -88,11 +88,14 @@ async def chat(req: ChatRequest):
     """Natural language Q&A with SSE streaming response."""
     _check_ai_available()
 
-    if not req.message.strip():
-        raise HTTPException(status_code=400, detail="Message cannot be empty")
+    # Pydantic min_length=1 handles empty-string validation.
+    # Strip whitespace for the downstream pipeline.
+    message = req.message.strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Message cannot be empty.")
 
     return StreamingResponse(
-        _stream_chat_response(req.message),
+        _stream_chat_response(message),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

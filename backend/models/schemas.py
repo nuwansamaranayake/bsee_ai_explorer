@@ -1,5 +1,5 @@
 from typing import Generic, TypeVar
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 T = TypeVar("T")
 
@@ -61,8 +61,8 @@ class Production(BaseModel):
 # ---------------------------------------------------------------------------
 
 class DocumentSearchRequest(BaseModel):
-    query: str
-    top_k: int = 5
+    query: str = Field(..., min_length=1, max_length=1000)
+    top_k: int = Field(default=5, ge=1, le=20)
     doc_type: str | None = None  # "safety_alert" | "investigation_report" | None
 
 
@@ -96,7 +96,7 @@ class DocumentStatsResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 class ReportRequest(BaseModel):
-    operator: str | None = None
-    year_start: int | None = None
-    year_end: int | None = None
+    operator: str | None = Field(default=None, max_length=200)
+    year_start: int | None = Field(default=None, ge=1950, le=2100)
+    year_end: int | None = Field(default=None, ge=1950, le=2100)
     include_ai: bool = True

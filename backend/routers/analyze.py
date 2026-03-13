@@ -7,7 +7,7 @@ from typing import Optional
 
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, case, distinct
 from sqlalchemy.orm import Session
 
@@ -30,12 +30,12 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 
 class TrendAnalysisRequest(BaseModel):
-    operator: str | None = None  # None = GoM-wide
-    year_start: int | None = None
-    year_end: int | None = None
+    operator: str | None = Field(default=None, max_length=200)
+    year_start: int | None = Field(default=None, ge=1950, le=2100)
+    year_end: int | None = Field(default=None, ge=1950, le=2100)
     incident_types: list[str] | None = None
-    water_depth_min: int | None = None
-    water_depth_max: int | None = None
+    water_depth_min: int | None = Field(default=None, ge=0, le=50000)
+    water_depth_max: int | None = Field(default=None, ge=0, le=50000)
 
 
 class TrendAnalysisResponse(BaseModel):
@@ -48,10 +48,10 @@ class TrendAnalysisResponse(BaseModel):
 
 class CategorizeRequest(BaseModel):
     incident_ids: list[int] | None = None
-    operator: str | None = None
-    year_start: int | None = None
-    year_end: int | None = None
-    batch_size: int = 50
+    operator: str | None = Field(default=None, max_length=200)
+    year_start: int | None = Field(default=None, ge=1950, le=2100)
+    year_end: int | None = Field(default=None, ge=1950, le=2100)
+    batch_size: int = Field(default=50, ge=1, le=200)
     force: bool = False
 
 
@@ -65,10 +65,7 @@ def _check_ai_available():
     if not service.is_available:
         raise HTTPException(
             status_code=503,
-            detail={
-                "error": "AI features unavailable",
-                "detail": "ANTHROPIC_API_KEY not configured",
-            },
+            detail={"error": "AI features are not currently available. Please try again later."},
         )
     return service
 
@@ -196,7 +193,11 @@ async def analyze_trends(req: TrendAnalysisRequest, db: Session = Depends(get_db
             temperature=0.4,
         )
     except ClaudeServiceError as e:
-        raise HTTPException(status_code=502, detail={"error": e.error_type, "detail": e.message})
+        logger.error("Trend analysis AI error: %s", e)
+        raise HTTPException(
+            status_code=502,
+            detail={"error": "AI analysis temporarily unavailable. Please try again."},
+        )
 
     return {
         "data": TrendAnalysisResponse(

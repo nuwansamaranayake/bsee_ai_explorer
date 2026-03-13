@@ -12,8 +12,9 @@ Endpoints:
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from typing import Literal
 
 from models.database import get_db
 
@@ -22,7 +23,7 @@ router = APIRouter(prefix="/regulatory")
 
 
 class StatusUpdate(BaseModel):
-    status: str  # new, reviewed, dismissed
+    status: Literal["new", "reviewed", "dismissed"]
 
 
 @router.get("/alerts")
@@ -56,7 +57,10 @@ async def generate_digest(alert_id: int):
     from services.regulatory_service import get_regulatory_service
     result = await get_regulatory_service().generate_digest(alert_id)
     if "error" in result:
-        raise HTTPException(status_code=400, detail=result["error"])
+        raise HTTPException(
+            status_code=502,
+            detail={"error": result["error"]},
+        )
     return {"data": result}
 
 

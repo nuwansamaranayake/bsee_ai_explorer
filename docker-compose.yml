@@ -5,6 +5,7 @@ services:
       - "80:80"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx_error_50x.html:/usr/share/nginx/html/error_50x.html:ro
     depends_on:
       backend:
         condition: service_healthy
