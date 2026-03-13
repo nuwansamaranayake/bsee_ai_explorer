@@ -30,6 +30,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
+import { OperatorSelector } from "@/components/OperatorSelector"
 import { useEffect, useState } from "react"
 
 const navItems = [
@@ -66,9 +67,7 @@ export function AppSidebar() {
           <span className="text-lg font-semibold">Beacon GoM</span>
         </div>
         <SidebarSeparator />
-        <div className="px-2 py-2 text-sm text-muted-foreground">
-          Operator Selector
-        </div>
+        <OperatorSelector />
       </SidebarHeader>
 
       <SidebarContent>

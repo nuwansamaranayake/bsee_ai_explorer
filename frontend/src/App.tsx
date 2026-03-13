@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
+import { OperatorProvider } from "@/contexts/OperatorContext"
 import { AppSidebar } from "@/components/AppSidebar"
 import Dashboard from "@/pages/Dashboard"
 import Compliance from "@/pages/Compliance"
@@ -46,7 +47,9 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <BrowserRouter>
-          <AppLayout />
+          <OperatorProvider>
+            <AppLayout />
+          </OperatorProvider>
         </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>

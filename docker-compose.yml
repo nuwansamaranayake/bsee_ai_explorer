@@ -28,16 +28,20 @@ services:
       - "8000"
     env_file:
       - .env
+    environment:
+      - DATABASE_PATH=/app/data/bsee.db
+      - CHROMA_PATH=/app/data/chroma
+      - PDF_PATH=/app/data/pdfs
     volumes:
       - sqlite_data:/app/data
       - chroma_data:/app/data/chroma
       - pdf_store:/app/data/pdfs
     healthcheck:
-      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health').raise_for_status()"]
+      test: ["CMD", "python", "-c", "import httpx; r=httpx.get('http://localhost:8000/health'); r.raise_for_status(); d=r.json(); print(f'v{d[\"version\"]} ai={d[\"ai_available\"]}')"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 15s
     restart: unless-stopped
 
 volumes:

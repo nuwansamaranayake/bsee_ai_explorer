@@ -1,0 +1,10 @@
+__pycache__
+*.pyc
+.env
+data/bsee.db
+data/chroma/
+data/pdfs/
+.pytest_cache
+tests/
+*.log
+.git

@@ -1,7 +1,7 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
+const API_BASE_URL = import.meta.env.VITE_API_URL || ""
 
 interface RequestOptions extends RequestInit {
-  params?: Record<string, string>
+  params?: Record<string, string | number | boolean | null | undefined>
 }
 
 export async function apiClient<T>(
@@ -12,8 +12,16 @@ export async function apiClient<T>(
 
   let url = `${API_BASE_URL}${endpoint}`
   if (params) {
-    const searchParams = new URLSearchParams(params)
-    url += `?${searchParams.toString()}`
+    const searchParams = new URLSearchParams()
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== null && value !== undefined && value !== "") {
+        searchParams.set(key, String(value))
+      }
+    }
+    const queryString = searchParams.toString()
+    if (queryString) {
+      url += `?${queryString}`
+    }
   }
 
   const response = await fetch(url, {
