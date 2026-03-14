@@ -161,15 +161,36 @@ function useChat() {
     setIsLoading(true)
 
     try {
+      // Inject auth token from sessionStorage (mirrors apiClient behavior)
+      const token = sessionStorage.getItem("beacon_token")
+      const authHeaders: Record<string, string> = {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      }
+
       const response = await fetch(`${API_BASE}/api/chat`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders,
         body: JSON.stringify({ message: text }),
       })
 
       if (!response.ok) {
+        // Handle 401 — session expired, redirect to login
+        if (response.status === 401) {
+          sessionStorage.removeItem("beacon_token")
+          sessionStorage.removeItem("beacon_user")
+          if (!window.location.pathname.startsWith("/login")) {
+            window.location.href = "/login"
+          }
+          throw new Error("SESSION_EXPIRED")
+        }
+
+        // Try to extract user-friendly error message from backend
         const errData = await response.json().catch(() => ({}))
-        throw new Error(errData.detail?.detail || errData.detail || `HTTP ${response.status}`)
+        const detail = errData?.detail
+        // Use backend message if available (e.g. sanitizer messages), otherwise use friendly fallback
+        const friendlyMsg = typeof detail === "string" ? detail : null
+        throw new Error(friendlyMsg || `STATUS_${response.status}`)
       }
 
       const reader = response.body?.getReader()
@@ -236,13 +257,38 @@ function useChat() {
         )
       )
     } catch (error) {
-      const errMsg = error instanceof Error ? error.message : "Unknown error"
+      const rawMsg = error instanceof Error ? error.message : ""
+
+      // Map internal error codes to user-friendly messages
+      let userMessage: string
+      if (rawMsg === "SESSION_EXPIRED") {
+        userMessage = "Your session has expired. Please sign in again."
+      } else if (rawMsg.startsWith("STATUS_")) {
+        const status = parseInt(rawMsg.replace("STATUS_", ""), 10)
+        if (status === 403) {
+          userMessage = "You don't have permission to use this feature."
+        } else if (status === 429) {
+          userMessage = "Too many requests — please wait a moment and try again."
+        } else if (status >= 500) {
+          userMessage = "The server encountered an issue. Please try again in a moment."
+        } else {
+          userMessage = "Something went wrong processing your question. Please try rephrasing."
+        }
+      } else if (rawMsg.includes("fetch") || rawMsg.includes("NetworkError")) {
+        userMessage = "Unable to reach the server. Please check your connection and try again."
+      } else if (rawMsg) {
+        // Backend-provided message (e.g. from input sanitizer)
+        userMessage = rawMsg
+      } else {
+        userMessage = "Something went wrong. Please try again."
+      }
+
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantId
             ? {
                 ...m,
-                content: `I encountered an error: ${errMsg}. Please try again.`,
+                content: userMessage,
                 error: true,
               }
             : m
