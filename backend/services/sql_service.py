@@ -17,6 +17,8 @@ from services.prompts import (
     TEXT_TO_SQL_USER,
     ANSWER_SYNTHESIS_SYSTEM,
     ANSWER_SYNTHESIS_USER,
+    FALLBACK_SQL_SYSTEM,
+    FALLBACK_SQL_USER,
     SQL_REFUSAL_MESSAGE,
 )
 
@@ -210,10 +212,42 @@ class SQLService:
             logger.error("Unexpected SQL error: %s", e)
             raise SQLServiceError("An unexpected error occurred while querying the database.") from e
 
+    async def _generate_fallback_sql(self, question: str, original_sql: str) -> str:
+        """Generate a simpler, broader SQL query when the first query returns no rows."""
+        system_prompt = FALLBACK_SQL_SYSTEM.format(schema=self.schema)
+        user_prompt = FALLBACK_SQL_USER.format(
+            user_question=question,
+            original_sql=original_sql,
+        )
+
+        sql = await self.claude.generate(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            max_tokens=1024,
+            temperature=0.1,
+        )
+
+        # Clean up response — remove any markdown fences
+        sql = sql.strip()
+        if sql.startswith("```"):
+            lines = sql.split("\n")
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            sql = "\n".join(lines).strip()
+
+        return sql
+
     async def _synthesize_answer(
         self, question: str, sql: str, results: list[dict]
     ) -> str:
-        """Use Claude to turn SQL results into a conversational answer."""
+        """Phase 2: Use Claude to analyze SQL results and produce an insightful answer.
+
+        This is the ANALYSIS PHASE — Claude receives the raw data retrieved by the
+        QUERY PHASE and performs deeper analysis: trend identification, comparisons,
+        outlier detection, and contextual interpretation.
+        """
         # Format results for the prompt
         if results:
             # Limit displayed results to first 50 rows for prompt size
@@ -267,6 +301,7 @@ class SQLService:
             }
 
         try:
+            # ── QUERY PHASE ──────────────────────────────────────
             # Step 1: Generate SQL
             sql = await self._generate_sql(question)
             logger.info("Generated SQL for question: %s", sql[:200])
@@ -275,7 +310,7 @@ class SQLService:
             try:
                 results = self._execute_sql(sql)
             except SQLServiceError:
-                # Step 3: If execution fails, retry SQL generation with error context
+                # Step 2b: If execution fails, retry SQL generation with error context
                 logger.warning("First SQL attempt failed, retrying with error context")
                 retry_prompt = (
                     f"The previous SQL query failed. The question was: {question}\n"
@@ -285,7 +320,24 @@ class SQLService:
                 sql = await self._generate_sql(retry_prompt)
                 results = self._execute_sql(sql)
 
-            # Step 4: Synthesize answer
+            # Step 3: Fallback — if query returned no rows, try a broader query
+            if not results:
+                logger.info("Query returned 0 rows, attempting fallback query")
+                try:
+                    fallback_sql = await self._generate_fallback_sql(question, sql)
+                    logger.info("Fallback SQL: %s", fallback_sql[:200])
+                    fallback_results = self._execute_sql(fallback_sql)
+                    if fallback_results:
+                        sql = fallback_sql
+                        results = fallback_results
+                        logger.info("Fallback query returned %d rows", len(results))
+                except (SQLServiceError, ClaudeServiceError) as fallback_err:
+                    logger.warning("Fallback query also failed: %s", fallback_err)
+                    # Continue with empty results — the analysis phase will
+                    # explain that no data matched and suggest rephrasing
+
+            # ── ANALYSIS PHASE ───────────────────────────────────
+            # Step 4: Send results to Claude for deep analysis
             answer = await self._synthesize_answer(question, sql, results)
 
             return {

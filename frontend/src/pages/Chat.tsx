@@ -27,9 +27,11 @@ interface ChatMessage {
 // ---------------------------------------------------------------------------
 
 const SUGGESTED_QUESTIONS = [
+  "Which companies have improved their safety record over time?",
+  "Show me incident trends for the top 10 operators",
+  "Compare BP vs Shell safety performance 2018-2024",
   "What were the top 3 causes of gas releases in deepwater last year?",
   "Which operator had the most incidents in 2023?",
-  "Compare Woodside's safety record to the GoM average",
   "Show me all fatal incidents in the last 5 years",
   "What's the trend in equipment failure incidents?",
 ]
