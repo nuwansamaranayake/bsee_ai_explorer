@@ -3,10 +3,11 @@
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import AsyncGenerator, Optional
 
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, case, distinct
 from sqlalchemy.orm import Session
@@ -52,8 +53,12 @@ class CategorizeRequest(BaseModel):
     operator: str | None = Field(default=None, max_length=200)
     year_start: int | None = Field(default=None, ge=1950, le=2100)
     year_end: int | None = Field(default=None, ge=1950, le=2100)
-    batch_size: int = Field(default=50, ge=1, le=200)
+    batch_size: int = Field(default=10, ge=1, le=25)
     force: bool = False
+
+
+# Max incidents to categorize in a single request (scope limiter)
+MAX_CATEGORIZE_SCOPE = 50
 
 
 # ---------------------------------------------------------------------------
@@ -219,9 +224,20 @@ async def analyze_trends(req: TrendAnalysisRequest, db: Session = Depends(get_db
     }
 
 
+def _sse_event(data: dict) -> str:
+    """Format a dict as an SSE event line."""
+    return f"data: {json.dumps(data)}\n\n"
+
+
 @router.post("/analyze/categorize")
 async def analyze_categorize(req: CategorizeRequest, db: Session = Depends(get_db)):
-    """AI root cause categorization — batch-classify incidents."""
+    """AI root cause categorization — SSE streaming with batch progress.
+
+    Streams progress events so the frontend can show live updates:
+      - {type: "progress", batch, total_batches, categorized, message}
+      - {type: "complete", categorized, skipped, summary, average_confidence}
+      - {type: "error", message}
+    """
     claude = _check_ai_available()
 
     # Sanitize operator name (defense-in-depth)
@@ -231,7 +247,7 @@ async def analyze_categorize(req: CategorizeRequest, db: Session = Depends(get_d
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-    # Build query for incidents to categorize
+    # ---- Build query for incidents ----
     query = db.query(Incident)
 
     if req.incident_ids:
@@ -244,12 +260,15 @@ async def analyze_categorize(req: CategorizeRequest, db: Session = Depends(get_d
         if req.year_end:
             query = query.filter(Incident.YEAR <= req.year_end)
 
-    incidents = query.all()
+    # Order by most recent first and cap scope
+    query = query.order_by(Incident.YEAR.desc(), Incident.INCIDENT_ID.desc())
+    total_matching = query.count()
+    incidents = query.limit(MAX_CATEGORIZE_SCOPE).all()
 
     if not incidents:
         return {"data": {"categorized": 0, "skipped": 0, "summary": {}}, "meta": {"status": "no_data"}}
 
-    # Filter out already-categorized incidents (unless force=True)
+    # ---- Filter out already-categorized (cache hit) ----
     if not req.force:
         existing_ids = set(
             row[0] for row in
@@ -257,118 +276,162 @@ async def analyze_categorize(req: CategorizeRequest, db: Session = Depends(get_d
                 IncidentRootCause.incident_id.in_([i.INCIDENT_ID for i in incidents])
             ).all()
         )
-        incidents = [i for i in incidents if i.INCIDENT_ID not in existing_ids]
+        uncategorized = [i for i in incidents if i.INCIDENT_ID not in existing_ids]
         skipped = len(existing_ids)
     else:
         skipped = 0
+        uncategorized = incidents
         # Delete existing categorizations for force re-run
-        if req.incident_ids:
-            db.query(IncidentRootCause).filter(
-                IncidentRootCause.incident_id.in_([i.INCIDENT_ID for i in incidents])
-            ).delete(synchronize_session=False)
+        db.query(IncidentRootCause).filter(
+            IncidentRootCause.incident_id.in_([i.INCIDENT_ID for i in incidents])
+        ).delete(synchronize_session=False)
 
-    if not incidents:
+    if not uncategorized:
         return {
             "data": {"categorized": 0, "skipped": skipped, "summary": {}},
             "meta": {"status": "all_categorized"},
         }
 
-    # Batch process
-    valid_causes = {
-        "equipment_failure", "human_error", "procedural_gap", "weather_event",
-        "corrosion", "design_flaw", "maintenance_failure", "communication_failure",
-        "third_party", "unknown",
-    }
+    # ---- Stream batched categorization ----
+    operator_label = req.operator or "All GoM"
+    batch_size = req.batch_size  # default 10
 
-    total_categorized = 0
-    cause_counts: dict[str, int] = {}
-    confidence_sum = 0.0
+    async def categorize_stream() -> AsyncGenerator[str, None]:
+        valid_causes = {
+            "equipment_failure", "human_error", "procedural_gap", "weather_event",
+            "corrosion", "design_flaw", "maintenance_failure", "communication_failure",
+            "third_party", "unknown",
+        }
 
-    for batch_start in range(0, len(incidents), req.batch_size):
-        batch = incidents[batch_start:batch_start + req.batch_size]
+        total_to_process = len(uncategorized)
+        total_batches = (total_to_process + batch_size - 1) // batch_size
+        total_categorized = 0
+        cause_counts: dict[str, int] = {}
+        confidence_sum = 0.0
 
-        # Format incident descriptions for the prompt
-        descriptions = "\n\n".join(
-            f"Incident ID: {inc.INCIDENT_ID}\n"
-            f"Type: {inc.INCIDENT_TYPE}\n"
-            f"Cause: {inc.CAUSE_OF_LOSS}\n"
-            f"Description: {inc.DESCRIPTION or 'No description available'}"
-            for inc in batch
-        )
+        scope_note = ""
+        if total_matching > MAX_CATEGORIZE_SCOPE:
+            scope_note = f" (most recent {MAX_CATEGORIZE_SCOPE} of {total_matching} total)"
 
-        user_prompt = ROOT_CAUSE_USER.format(
-            count=len(batch),
-            incident_descriptions=descriptions,
-        )
+        # Initial progress event
+        yield _sse_event({
+            "type": "progress",
+            "batch": 0,
+            "total_batches": total_batches,
+            "categorized": 0,
+            "message": f"Starting categorization of {total_to_process} incidents for {operator_label}{scope_note}...",
+        })
 
-        try:
-            result = await claude.generate_json(
-                system_prompt=ROOT_CAUSE_SYSTEM,
-                user_prompt=user_prompt,
-                max_tokens=4096,
+        for batch_idx in range(total_batches):
+            batch_start = batch_idx * batch_size
+            batch = uncategorized[batch_start:batch_start + batch_size]
+
+            yield _sse_event({
+                "type": "progress",
+                "batch": batch_idx + 1,
+                "total_batches": total_batches,
+                "categorized": total_categorized,
+                "message": f"Categorizing batch {batch_idx + 1} of {total_batches}... ({len(batch)} incidents)",
+            })
+
+            # Format incident descriptions for the prompt
+            descriptions = "\n\n".join(
+                f"Incident ID: {inc.INCIDENT_ID}\n"
+                f"Type: {inc.INCIDENT_TYPE}\n"
+                f"Cause: {inc.CAUSE_OF_LOSS}\n"
+                f"Description: {inc.DESCRIPTION or 'No description available'}"
+                for inc in batch
             )
-        except ClaudeServiceError as e:
-            logger.error("Categorization batch failed: %s", e)
-            continue
 
-        # Handle both list and dict responses
-        if isinstance(result, dict):
-            classifications = result.get("classifications", result.get("incidents", [result]))
-        elif isinstance(result, list):
-            classifications = result
-        else:
-            logger.error("Unexpected categorization response type: %s", type(result))
-            continue
+            user_prompt = ROOT_CAUSE_USER.format(
+                count=len(batch),
+                incident_descriptions=descriptions,
+            )
 
-        # Store results
-        now = datetime.now(timezone.utc).isoformat()
-        for cls in classifications:
-            incident_id = cls.get("incident_id")
-            primary = cls.get("primary_cause", "unknown")
-            root_causes = cls.get("root_causes", [primary])
-            confidence = cls.get("confidence", 0.5)
-            reasoning = cls.get("reasoning", "")
+            try:
+                result = await claude.generate_json(
+                    system_prompt=ROOT_CAUSE_SYSTEM,
+                    user_prompt=user_prompt,
+                    max_tokens=4096,
+                )
+            except ClaudeServiceError as e:
+                logger.error("Categorization batch %d failed: %s", batch_idx + 1, e)
+                yield _sse_event({
+                    "type": "progress",
+                    "batch": batch_idx + 1,
+                    "total_batches": total_batches,
+                    "categorized": total_categorized,
+                    "message": f"Batch {batch_idx + 1} had an AI error, skipping...",
+                })
+                continue
 
-            # Validate primary cause
-            if primary not in valid_causes:
-                primary = "unknown"
-            root_causes = [c for c in root_causes if c in valid_causes] or ["unknown"]
-
-            # Upsert categorization
-            existing = db.query(IncidentRootCause).filter_by(incident_id=incident_id).first()
-            if existing:
-                existing.primary_cause = primary
-                existing.root_causes = root_causes
-                existing.confidence = confidence
-                existing.reasoning = reasoning
-                existing.categorized_at = now
+            # Handle both list and dict responses
+            if isinstance(result, dict):
+                classifications = result.get("classifications", result.get("incidents", [result]))
+            elif isinstance(result, list):
+                classifications = result
             else:
-                db.add(IncidentRootCause(
-                    incident_id=incident_id,
-                    primary_cause=primary,
-                    root_causes=root_causes,
-                    confidence=confidence,
-                    reasoning=reasoning,
-                    categorized_at=now,
-                ))
+                logger.error("Unexpected categorization response type: %s", type(result))
+                continue
 
-            total_categorized += 1
-            cause_counts[primary] = cause_counts.get(primary, 0) + 1
-            confidence_sum += confidence
+            # Store results
+            now = datetime.now(timezone.utc).isoformat()
+            for cls in classifications:
+                incident_id = cls.get("incident_id")
+                primary = cls.get("primary_cause", "unknown")
+                root_causes = cls.get("root_causes", [primary])
+                confidence = cls.get("confidence", 0.5)
+                reasoning = cls.get("reasoning", "")
 
-    db.commit()
+                # Validate primary cause
+                if primary not in valid_causes:
+                    primary = "unknown"
+                root_causes = [c for c in root_causes if c in valid_causes] or ["unknown"]
 
-    avg_confidence = round(confidence_sum / total_categorized, 2) if total_categorized > 0 else 0
+                # Upsert categorization
+                existing = db.query(IncidentRootCause).filter_by(incident_id=incident_id).first()
+                if existing:
+                    existing.primary_cause = primary
+                    existing.root_causes = root_causes
+                    existing.confidence = confidence
+                    existing.reasoning = reasoning
+                    existing.categorized_at = now
+                else:
+                    db.add(IncidentRootCause(
+                        incident_id=incident_id,
+                        primary_cause=primary,
+                        root_causes=root_causes,
+                        confidence=confidence,
+                        reasoning=reasoning,
+                        categorized_at=now,
+                    ))
 
-    return {
-        "data": {
+                total_categorized += 1
+                cause_counts[primary] = cause_counts.get(primary, 0) + 1
+                confidence_sum += confidence
+
+            # Commit after each batch so partial results are saved
+            db.commit()
+
+        avg_confidence = round(confidence_sum / total_categorized, 2) if total_categorized > 0 else 0
+
+        # Final completion event
+        yield _sse_event({
+            "type": "complete",
             "categorized": total_categorized,
             "skipped": skipped,
             "summary": cause_counts,
             "average_confidence": avg_confidence,
+        })
+
+    return StreamingResponse(
+        categorize_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
         },
-        "meta": {"status": "ok", "tokens_used": token_tracker.summary},
-    }
+    )
 
 
 @router.get("/analyze/root-causes")

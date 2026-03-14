@@ -54,8 +54,9 @@ export function RootCauseChart({ operator }: RootCauseChartProps) {
   } = useRootCauses(operator)
 
   const {
-    mutate: categorize,
+    categorize,
     isPending: isCategorizing,
+    progress,
   } = useCategorize()
 
   const rootCauses = rootCausesData?.data ?? []
@@ -72,21 +73,27 @@ export function RootCauseChart({ operator }: RootCauseChartProps) {
     categorize(
       {
         operator: operator || undefined,
-        batch_size: 50,
+        batch_size: 10,
       },
       {
-        onSuccess: (data) => {
-          const result = data.data
-          setCategorizeStatus(
-            `Categorized ${result.categorized} incidents (${result.skipped} already done). ` +
-            `Avg confidence: ${(result.average_confidence * 100).toFixed(0)}%`
-          )
+        onSuccess: (result) => {
+          if (result.categorized === 0 && result.skipped > 0) {
+            setCategorizeStatus(
+              `All ${result.skipped} incidents are already categorized. Use force mode to re-classify.`
+            )
+          } else {
+            setCategorizeStatus(
+              `Categorized ${result.categorized} incidents` +
+              (result.skipped > 0 ? ` (${result.skipped} already done)` : "") +
+              `. Avg confidence: ${(result.average_confidence * 100).toFixed(0)}%`
+            )
+          }
           // Refetch root causes chart
           queryClient.invalidateQueries({ queryKey: ["root-causes"] })
         },
         onError: (error) => {
           setCategorizeStatus(
-            `Failed: ${error instanceof Error ? error.message : "AI service unavailable"}`
+            `Failed: ${error.message}`
           )
         },
       }
@@ -97,6 +104,11 @@ export function RootCauseChart({ operator }: RootCauseChartProps) {
     if (!percent || percent < 0.05) return null
     return `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
   }
+
+  // Progress bar percentage
+  const progressPct = progress
+    ? Math.round((progress.batch / Math.max(progress.total_batches, 1)) * 100)
+    : 0
 
   return (
     <ChartCard
@@ -129,7 +141,28 @@ export function RootCauseChart({ operator }: RootCauseChartProps) {
         </Button>
       }
     >
-      {categorizeStatus && (
+      {/* Live progress indicator */}
+      {isCategorizing && progress && (
+        <div className="mb-3 space-y-2">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <RefreshCw className="h-3 w-3 animate-spin shrink-0" />
+            <span>{progress.message}</span>
+          </div>
+          <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+            <div
+              className="bg-primary h-full rounded-full transition-all duration-500 ease-out"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-xs text-muted-foreground">
+            <span>Batch {progress.batch} of {progress.total_batches}</span>
+            <span>{progress.categorized} categorized so far</span>
+          </div>
+        </div>
+      )}
+
+      {/* Status message after completion */}
+      {categorizeStatus && !isCategorizing && (
         <div className={`mb-3 rounded-md px-3 py-2 text-xs ${
           categorizeStatus.startsWith("Failed")
             ? "bg-destructive/10 text-destructive"
@@ -150,7 +183,8 @@ export function RootCauseChart({ operator }: RootCauseChartProps) {
           <div className="text-center">
             <p className="text-sm font-medium">No root causes categorized yet</p>
             <p className="text-xs mt-1">
-              Click &quot;Categorize Incidents&quot; to run AI classification.
+              Click &quot;Categorize Incidents&quot; to run AI classification
+              {operator ? ` for ${operator}` : ""}.
             </p>
           </div>
         </div>
