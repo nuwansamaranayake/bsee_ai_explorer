@@ -1,9 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react"
 import ReactMarkdown from "react-markdown"
-import { Send, Bot, User, ChevronDown, ChevronRight, RefreshCw, Database, Code } from "lucide-react"
+import { Send, Bot, User, ChevronDown, ChevronRight, RefreshCw, Database, Code, Zap, BarChart3, GitCompareArrows } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Skeleton } from "@/components/ui/skeleton"
 import { sanitizeAIResponse } from "@/lib/sanitize"
 
 const API_BASE = import.meta.env.VITE_API_URL || ""
@@ -12,37 +11,77 @@ const API_BASE = import.meta.env.VITE_API_URL || ""
 // Types
 // ---------------------------------------------------------------------------
 
+type Complexity = "simple" | "analytical" | "comparative"
+
 interface ChatMessage {
   id: string
   role: "user" | "assistant"
   content: string
-  sql?: string
+  sql?: string[]          // May have multiple queries now
   data?: Record<string, unknown>[]
+  complexity?: Complexity
   error?: boolean
   timestamp: Date
 }
 
 // ---------------------------------------------------------------------------
-// Suggested questions
+// Suggested questions — showcase the intelligence engine
 // ---------------------------------------------------------------------------
 
 const SUGGESTED_QUESTIONS = [
-  "Which companies have improved their safety record over time?",
-  "Show me incident trends for the top 10 operators",
-  "Compare BP vs Shell safety performance 2018-2024",
-  "What were the top 3 causes of gas releases in deepwater last year?",
-  "Which operator had the most incidents in 2023?",
-  "Show me all fatal incidents in the last 5 years",
-  "What's the trend in equipment failure incidents?",
+  "Which companies have shown consistent safety improvement over the last decade?",
+  "Compare BP vs Shell vs Chevron safety records 2018-2024",
+  "What are the emerging incident trends in deepwater operations?",
+  "Which operators have the worst violation-to-incident ratio?",
+  "Is the Gulf of Mexico getting safer? Show me the evidence.",
+  "What are the most common root causes of fatalities?",
+  "Rank the top 10 operators by safety performance",
+  "Which platforms are the most dangerous in the GoM?",
 ]
 
 // ---------------------------------------------------------------------------
-// Chat message component
+// Complexity badge
+// ---------------------------------------------------------------------------
+
+const COMPLEXITY_CONFIG: Record<Complexity, { label: string; icon: typeof Zap; className: string }> = {
+  simple: {
+    label: "Quick Lookup",
+    icon: Zap,
+    className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+  },
+  analytical: {
+    label: "Multi-Query Analysis",
+    icon: BarChart3,
+    className: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+  },
+  comparative: {
+    label: "Comparative Analysis",
+    icon: GitCompareArrows,
+    className: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20",
+  },
+}
+
+function ComplexityBadge({ complexity }: { complexity: Complexity }) {
+  const config = COMPLEXITY_CONFIG[complexity]
+  const Icon = config.icon
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border ${config.className}`}>
+      <Icon className="h-3 w-3" />
+      {config.label}
+    </span>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Chat message components
 // ---------------------------------------------------------------------------
 
 function AssistantMessage({ message }: { message: ChatMessage }) {
   const [showSql, setShowSql] = useState(false)
   const [showData, setShowData] = useState(false)
+
+  const queries = message.sql ?? []
+  const hasQueries = queries.length > 0
 
   return (
     <div className="flex gap-3 items-start">
@@ -50,21 +89,37 @@ function AssistantMessage({ message }: { message: ChatMessage }) {
         <Bot className="h-4 w-4" />
       </div>
       <div className="flex-1 space-y-2 max-w-[85%]">
+        {/* Complexity badge */}
+        {message.complexity && (
+          <ComplexityBadge complexity={message.complexity} />
+        )}
+
         {/* SQL section (collapsed by default) */}
-        {message.sql && (
+        {hasQueries && (
           <button
             onClick={() => setShowSql(!showSql)}
             className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             {showSql ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
             <Code className="h-3 w-3" />
-            Show SQL Query
+            Show SQL {queries.length > 1 ? `Queries (${queries.length})` : "Query"}
           </button>
         )}
-        {showSql && message.sql && (
-          <pre className="bg-muted p-3 rounded-md text-xs overflow-x-auto font-mono">
-            {message.sql}
-          </pre>
+        {showSql && hasQueries && (
+          <div className="space-y-2">
+            {queries.map((sql, i) => (
+              <div key={i}>
+                {queries.length > 1 && (
+                  <p className="text-[10px] text-muted-foreground font-medium mb-1">
+                    Query {i + 1} of {queries.length}
+                  </p>
+                )}
+                <pre className="bg-muted p-3 rounded-md text-xs overflow-x-auto font-mono">
+                  {sql}
+                </pre>
+              </div>
+            ))}
+          </div>
         )}
 
         {/* Data section (collapsed by default) */}
@@ -135,12 +190,39 @@ function UserMessage({ message }: { message: ChatMessage }) {
 }
 
 // ---------------------------------------------------------------------------
+// Phase loading indicator
+// ---------------------------------------------------------------------------
+
+function PhaseIndicator({ phase }: { phase: string }) {
+  const phaseMessages: Record<string, string> = {
+    planning: "Planning analysis approach...",
+    planned: "Analysis planned",
+    executing: "Running queries...",
+    analyzing: "Analyzing results...",
+  }
+  const message = phaseMessages[phase] || phase
+
+  return (
+    <div className="flex gap-3 items-start">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
+        <Bot className="h-4 w-4 animate-pulse" />
+      </div>
+      <div className="flex items-center gap-2 py-2">
+        <RefreshCw className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+        <span className="text-sm text-muted-foreground">{message}</span>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // useChat hook — manages SSE connection, message state, streaming
 // ---------------------------------------------------------------------------
 
 function useChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [currentPhase, setCurrentPhase] = useState<string | null>(null)
 
   const sendMessage = useCallback(async (text: string) => {
     const userMsg: ChatMessage = {
@@ -161,6 +243,7 @@ function useChat() {
 
     setMessages((prev) => [...prev, userMsg, assistantMsg])
     setIsLoading(true)
+    setCurrentPhase("planning")
 
     try {
       // Inject auth token from sessionStorage (mirrors apiClient behavior)
@@ -190,7 +273,6 @@ function useChat() {
         // Try to extract user-friendly error message from backend
         const errData = await response.json().catch(() => ({}))
         const detail = errData?.detail
-        // Use backend message if available (e.g. sanitizer messages), otherwise use friendly fallback
         const friendlyMsg = typeof detail === "string" ? detail : null
         throw new Error(friendlyMsg || `STATUS_${response.status}`)
       }
@@ -200,9 +282,10 @@ function useChat() {
 
       const decoder = new TextDecoder()
       let buffer = ""
-      let sql = ""
+      const sqlQueries: string[] = []
       let data: Record<string, unknown>[] = []
       let answer = ""
+      let complexity: Complexity | undefined
 
       while (true) {
         const { done, value } = await reader.read()
@@ -220,22 +303,29 @@ function useChat() {
           try {
             const event = JSON.parse(jsonStr)
 
-            if (event.type === "sql") {
-              sql = event.content
+            if (event.type === "phase") {
+              // Update loading phase indicator
+              setCurrentPhase(event.phase)
+            } else if (event.type === "complexity") {
+              complexity = event.content as Complexity
+            } else if (event.type === "sql") {
+              sqlQueries.push(event.content)
             } else if (event.type === "data") {
               data = event.content
             } else if (event.type === "answer" || event.type === "chunk") {
               answer += event.content
+              setCurrentPhase(null) // Clear phase once answer starts
               // Update the assistant message progressively
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === assistantId
-                    ? { ...m, content: answer, sql, data }
+                    ? { ...m, content: answer, sql: sqlQueries, data, complexity }
                     : m
                 )
               )
             } else if (event.type === "error") {
               answer = event.content
+              setCurrentPhase(null)
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === assistantId
@@ -251,10 +341,11 @@ function useChat() {
       }
 
       // Final update with all data
+      setCurrentPhase(null)
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantId
-            ? { ...m, content: answer || "No response received.", sql, data }
+            ? { ...m, content: answer || "No response received.", sql: sqlQueries, data, complexity }
             : m
         )
       )
@@ -279,29 +370,26 @@ function useChat() {
       } else if (rawMsg.includes("fetch") || rawMsg.includes("NetworkError")) {
         userMessage = "Unable to reach the server. Please check your connection and try again."
       } else if (rawMsg) {
-        // Backend-provided message (e.g. from input sanitizer)
         userMessage = rawMsg
       } else {
         userMessage = "Something went wrong. Please try again."
       }
 
+      setCurrentPhase(null)
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantId
-            ? {
-                ...m,
-                content: userMessage,
-                error: true,
-              }
+            ? { ...m, content: userMessage, error: true }
             : m
         )
       )
     } finally {
       setIsLoading(false)
+      setCurrentPhase(null)
     }
   }, [])
 
-  return { messages, isLoading, sendMessage }
+  return { messages, isLoading, currentPhase, sendMessage }
 }
 
 // ---------------------------------------------------------------------------
@@ -309,7 +397,7 @@ function useChat() {
 // ---------------------------------------------------------------------------
 
 export default function Chat() {
-  const { messages, isLoading, sendMessage } = useChat()
+  const { messages, isLoading, currentPhase, sendMessage } = useChat()
   const [input, setInput] = useState("")
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -319,7 +407,7 @@ export default function Chat() {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [messages])
+  }, [messages, currentPhase])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -346,7 +434,7 @@ export default function Chat() {
           AI Safety Assistant
         </h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Ask questions about Gulf of Mexico safety data using natural language.
+          Ask questions about Gulf of Mexico safety data — from simple lookups to multi-query analysis.
         </p>
       </div>
 
@@ -361,7 +449,7 @@ export default function Chat() {
               <div>
                 <h2 className="text-lg font-semibold">Ask me anything about GoM safety data</h2>
                 <p className="text-muted-foreground text-sm mt-1">
-                  I can query the BSEE database, analyze trends, and compare operators.
+                  I can run multi-query analysis, compare operators, identify trends, and surface insights.
                 </p>
               </div>
 
@@ -391,17 +479,9 @@ export default function Chat() {
             )
           )}
 
-          {/* Loading indicator */}
-          {isLoading && messages[messages.length - 1]?.content === "" && (
-            <div className="flex gap-3 items-start">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
-                <Bot className="h-4 w-4 animate-pulse" />
-              </div>
-              <div className="space-y-2">
-                <Skeleton className="h-4 w-48" />
-                <Skeleton className="h-4 w-36" />
-              </div>
-            </div>
+          {/* Rich loading indicator with current phase */}
+          {isLoading && currentPhase && (
+            <PhaseIndicator phase={currentPhase} />
           )}
         </div>
       </ScrollArea>

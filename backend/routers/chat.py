@@ -1,7 +1,7 @@
-"""Chat endpoint — natural language Q&A with SSE streaming.
+"""Chat endpoint — intelligent multi-query Q&A with SSE streaming.
 
-Pipeline: user question → generate SQL → execute → synthesize answer.
-Streams three phases via SSE: sql, data, answer.
+Three-phase pipeline: PLAN → EXECUTE → ANALYZE.
+Streams progress events so the frontend can show rich loading states.
 """
 
 import json
@@ -39,40 +39,75 @@ def _check_ai_available():
         )
 
 
-async def _stream_chat_response(message: str) -> AsyncGenerator[str, None]:
-    """Stream the chat response as SSE events.
+def _sse(data: dict) -> str:
+    """Format a dict as an SSE data line."""
+    return f"data: {json.dumps(data)}\n\n"
 
-    Phases:
-    1. data: {"type": "sql", "content": "SELECT ..."}
-    2. data: {"type": "data", "content": [...rows]}
-    3. data: {"type": "answer", "content": "Based on..."}
-    4. data: {"type": "done"}
+
+async def _stream_chat_response(message: str) -> AsyncGenerator[str, None]:
+    """Stream the chat response as SSE events with multi-phase progress.
+
+    Event types:
+    - {"type": "phase", "phase": "planning|executing|analyzing", ...}
+    - {"type": "sql", "content": "SELECT ...", "query_number": 1, "total": 2}
+    - {"type": "data", "content": [...rows]}
+    - {"type": "answer", "content": "Based on..."}
+    - {"type": "complexity", "content": "simple|analytical|comparative"}
+    - {"type": "error", "content": "..."}
+    - {"type": "done"}
     """
     sql_service = get_sql_service()
 
-    try:
-        result = await sql_service.answer_question(message)
+    # Collect progress events emitted by the pipeline
+    progress_events: list[tuple[str, dict]] = []
 
-        # Phase 1: SQL query (if generated)
-        if result.get("sql"):
-            yield f"data: {json.dumps({'type': 'sql', 'content': result['sql']})}\n\n"
+    def on_progress(phase: str, details: dict):
+        progress_events.append((phase, details))
+
+    try:
+        # Run the three-phase pipeline with progress callback
+        result = await sql_service.answer_question(message, on_progress=on_progress)
+
+        # Stream progress events that were collected during execution
+        for phase, details in progress_events:
+            yield _sse({
+                "type": "phase",
+                "phase": phase,
+                "message": details.get("message", ""),
+                **{k: v for k, v in details.items() if k != "message"},
+            })
 
         # Check if the query was refused (destructive attempt)
         if result.get("refused"):
-            yield f"data: {json.dumps({'type': 'answer', 'content': result['answer']})}\n\n"
-            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            if result.get("answer"):
+                yield _sse({"type": "answer", "content": result["answer"]})
+            yield _sse({"type": "done"})
             return
 
-        # Phase 2: Raw data
+        # Emit complexity level
+        complexity = result.get("complexity", "simple")
+        yield _sse({"type": "complexity", "content": complexity})
+
+        # Emit SQL queries (may be multiple)
+        queries = result.get("queries", [])
+        for i, sql in enumerate(queries):
+            yield _sse({
+                "type": "sql",
+                "content": sql,
+                "query_number": i + 1,
+                "total": len(queries),
+            })
+
+        # Emit raw data (combined from all queries)
         if result.get("data"):
-            yield f"data: {json.dumps({'type': 'data', 'content': result['data'][:50]})}\n\n"
+            yield _sse({"type": "data", "content": result["data"][:50]})
 
-        # Phase 3: AI narrative answer
+        # Emit AI analysis answer
         if result.get("answer"):
-            yield f"data: {json.dumps({'type': 'answer', 'content': result['answer']})}\n\n"
+            yield _sse({"type": "answer", "content": result["answer"]})
 
-        # Phase 4: Done
-        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        # Done
+        yield _sse({"type": "done"})
 
     except Exception as e:
         logger.error("Chat stream error: %s", e)
@@ -80,8 +115,8 @@ async def _stream_chat_response(message: str) -> AsyncGenerator[str, None]:
             "I encountered an error while processing your question. "
             "Please try rephrasing or ask a different question."
         )
-        yield f"data: {json.dumps({'type': 'error', 'content': error_msg})}\n\n"
-        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        yield _sse({"type": "error", "content": error_msg})
+        yield _sse({"type": "done"})
 
 
 @router.post("/chat")

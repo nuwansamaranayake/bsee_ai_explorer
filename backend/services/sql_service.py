@@ -1,6 +1,10 @@
-"""SQLService — text-to-SQL pipeline for natural language Q&A.
+"""SQLService — intelligent multi-query chat engine for natural language Q&A.
 
-Pipeline: question → Claude generates SQL → execute safely → Claude synthesizes answer.
+Three-phase pipeline: PLAN → EXECUTE → ANALYZE.
+Phase 1: Claude creates a query plan (simple, analytical, or comparative).
+Phase 2: Generate and execute SQL for each query in the plan.
+Phase 3: Claude analyzes the combined results to produce an insightful answer.
+
 All SQL execution is READ-ONLY with strict safety guards.
 """
 
@@ -8,15 +12,17 @@ import logging
 import os
 import re
 import sqlite3
-from typing import Any
+from typing import Any, Callable
 
 from services.claude_service import ClaudeService, ClaudeServiceError
 from services.input_sanitizer import validate_generated_sql, sanitize_user_input
 from services.prompts import (
-    TEXT_TO_SQL_SYSTEM,
-    TEXT_TO_SQL_USER,
-    ANSWER_SYNTHESIS_SYSTEM,
-    ANSWER_SYNTHESIS_USER,
+    QUERY_PLANNER_SYSTEM,
+    QUERY_PLANNER_USER,
+    SQL_GENERATOR_SYSTEM,
+    SQL_GENERATOR_USER,
+    ANALYSIS_SYSTEM,
+    ANALYSIS_USER,
     FALLBACK_SQL_SYSTEM,
     FALLBACK_SQL_USER,
     SQL_REFUSAL_MESSAGE,
@@ -24,12 +30,14 @@ from services.prompts import (
 
 logger = logging.getLogger(__name__)
 
-# Maximum rows returned from any query
-MAX_ROWS = 1000
+# Maximum rows returned from any single query
+MAX_ROWS = 500
 # Query timeout in seconds
 QUERY_TIMEOUT_SECONDS = 10
 # Sample rows per table for context
 SAMPLE_ROWS_COUNT = 3
+# Maximum queries in a plan
+MAX_PLAN_QUERIES = 3
 
 
 class SQLServiceError(Exception):
@@ -38,7 +46,7 @@ class SQLServiceError(Exception):
 
 
 class SQLService:
-    """Text-to-SQL pipeline: question → SQL → execute → answer.
+    """Intelligent multi-query chat engine: PLAN → EXECUTE → ANALYZE.
 
     All SQL execution is strictly READ-ONLY.
     """
@@ -50,7 +58,7 @@ class SQLService:
         self.sample_rows = self._load_samples()
 
     def _load_schema(self) -> str:
-        """Read the SQLite schema for prompt injection."""
+        """Read the SQLite schema for prompt context."""
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
@@ -142,23 +150,10 @@ class SQLService:
 
         return True
 
-    async def _generate_sql(self, question: str) -> str:
-        """Use Claude to convert natural language to SQL."""
-        system_prompt = TEXT_TO_SQL_SYSTEM.format(schema=self.schema)
-        user_prompt = TEXT_TO_SQL_USER.format(
-            user_question=question,
-            sample_rows=self.sample_rows,
-        )
-
-        sql = await self.claude.generate(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            max_tokens=1024,
-            temperature=0.1,
-        )
-
-        # Clean up response — remove any markdown fences
-        sql = sql.strip()
+    @staticmethod
+    def _clean_sql_response(text: str) -> str:
+        """Strip markdown fences and whitespace from a SQL response."""
+        sql = text.strip()
         if sql.startswith("```"):
             lines = sql.split("\n")
             if lines[0].startswith("```"):
@@ -166,7 +161,6 @@ class SQLService:
             if lines and lines[-1].strip() == "```":
                 lines = lines[:-1]
             sql = "\n".join(lines).strip()
-
         return sql
 
     def _execute_sql(self, sql: str) -> list[dict]:
@@ -212,6 +206,95 @@ class SQLService:
             logger.error("Unexpected SQL error: %s", e)
             raise SQLServiceError("An unexpected error occurred while querying the database.") from e
 
+    # ------------------------------------------------------------------
+    # Phase 1: PLAN — Claude decides how to answer the question
+    # ------------------------------------------------------------------
+
+    async def _create_query_plan(self, question: str) -> dict:
+        """Phase 1: Ask Claude to create a structured query plan."""
+        system_prompt = QUERY_PLANNER_SYSTEM.format(schema=self.schema)
+        user_prompt = QUERY_PLANNER_USER.format(question=question)
+
+        try:
+            plan = await self.claude.generate_json(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=1024,
+            )
+        except ClaudeServiceError:
+            logger.warning("Query planning failed, falling back to simple mode")
+            return self._default_plan(question)
+
+        # Validate plan structure
+        if not isinstance(plan, dict):
+            return self._default_plan(question)
+
+        queries = plan.get("queries", [])
+        if not queries or not isinstance(queries, list) or len(queries) > MAX_PLAN_QUERIES:
+            return self._default_plan(question)
+
+        # Validate each query has required fields
+        valid_queries = []
+        for q in queries:
+            if isinstance(q, dict) and q.get("purpose") and q.get("description"):
+                valid_queries.append(q)
+
+        if not valid_queries:
+            return self._default_plan(question)
+
+        complexity = plan.get("complexity", "simple")
+        if complexity not in ("simple", "analytical", "comparative"):
+            complexity = "analytical" if len(valid_queries) > 1 else "simple"
+
+        return {
+            "complexity": complexity,
+            "queries": valid_queries,
+            "analysis_needed": plan.get("analysis_needed", "Provide a direct answer"),
+        }
+
+    @staticmethod
+    def _default_plan(question: str) -> dict:
+        """Fallback plan: single query, simple complexity."""
+        return {
+            "complexity": "simple",
+            "queries": [{"purpose": "Answer the question directly", "description": question}],
+            "analysis_needed": "Provide a direct answer based on the data.",
+        }
+
+    # ------------------------------------------------------------------
+    # Phase 2: EXECUTE — Generate and run SQL for each query in the plan
+    # ------------------------------------------------------------------
+
+    async def _generate_planned_sql(
+        self,
+        question: str,
+        query_spec: dict,
+        query_number: int = 1,
+        total_queries: int = 1,
+    ) -> str:
+        """Phase 2: Generate SQL for one query in the plan."""
+        system_prompt = SQL_GENERATOR_SYSTEM.format(
+            schema=self.schema,
+            query_purpose=query_spec["purpose"],
+            query_description=query_spec["description"],
+            original_question=question,
+            query_number=query_number,
+            total_queries=total_queries,
+        )
+        user_prompt = SQL_GENERATOR_USER.format(
+            query_purpose=query_spec["purpose"],
+            query_description=query_spec["description"],
+            sample_rows=self.sample_rows,
+        )
+
+        text = await self.claude.generate(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            max_tokens=1024,
+            temperature=0.1,
+        )
+        return self._clean_sql_response(text)
+
     async def _generate_fallback_sql(self, question: str, original_sql: str) -> str:
         """Generate a simpler, broader SQL query when the first query returns no rows."""
         system_prompt = FALLBACK_SQL_SYSTEM.format(schema=self.schema)
@@ -220,62 +303,91 @@ class SQLService:
             original_sql=original_sql,
         )
 
-        sql = await self.claude.generate(
+        text = await self.claude.generate(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             max_tokens=1024,
             temperature=0.1,
         )
+        return self._clean_sql_response(text)
 
-        # Clean up response — remove any markdown fences
-        sql = sql.strip()
-        if sql.startswith("```"):
-            lines = sql.split("\n")
-            if lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines and lines[-1].strip() == "```":
-                lines = lines[:-1]
-            sql = "\n".join(lines).strip()
+    # ------------------------------------------------------------------
+    # Phase 3: ANALYZE — Claude reasons over the combined results
+    # ------------------------------------------------------------------
 
-        return sql
-
-    async def _synthesize_answer(
-        self, question: str, sql: str, results: list[dict]
+    async def _analyze_results(
+        self, question: str, all_results: list[dict], plan: dict
     ) -> str:
-        """Phase 2: Use Claude to analyze SQL results and produce an insightful answer.
+        """Phase 3: Claude analyzes combined results from all queries."""
+        formatted = self._format_results_for_analysis(all_results)
 
-        This is the ANALYSIS PHASE — Claude receives the raw data retrieved by the
-        QUERY PHASE and performs deeper analysis: trend identification, comparisons,
-        outlier detection, and contextual interpretation.
-        """
-        # Format results for the prompt
-        if results:
-            # Limit displayed results to first 50 rows for prompt size
-            display_results = results[:50]
-            results_text = "\n".join(str(row) for row in display_results)
-            if len(results) > 50:
-                results_text += f"\n... ({len(results) - 50} more rows)"
-        else:
-            results_text = "No results returned."
+        if not formatted.strip() or formatted == "No data retrieved.":
+            return (
+                "I couldn't find enough data to answer that question. "
+                "Try asking about a specific operator or time period."
+            )
 
-        user_prompt = ANSWER_SYNTHESIS_USER.format(
-            user_question=question,
-            sql_query=sql,
-            row_count=len(results),
-            query_results=results_text,
+        system_prompt = ANALYSIS_SYSTEM.format(original_question=question)
+        user_prompt = ANALYSIS_USER.format(
+            original_question=question,
+            formatted_results=formatted,
         )
 
         return await self.claude.generate(
-            system_prompt=ANSWER_SYNTHESIS_SYSTEM,
+            system_prompt=system_prompt,
             user_prompt=user_prompt,
             max_tokens=2048,
             temperature=0.3,
         )
 
-    async def answer_question(self, question: str) -> dict:
-        """Full pipeline: question → SQL → execute → answer.
+    @staticmethod
+    def _format_results_for_analysis(all_results: list[dict]) -> str:
+        """Format query results into a readable text block for Claude."""
+        parts = []
+        for result_set in all_results:
+            purpose = result_set.get("purpose", "Query")
+            sql = result_set.get("sql", "")
+            data = result_set.get("data", [])
 
-        Returns dict with keys: answer, sql, data, error (if any).
+            if not data:
+                parts.append(f"[{purpose}]: No results returned.")
+                continue
+
+            parts.append(f"[{purpose}] ({len(data)} rows):")
+
+            if data and isinstance(data[0], dict):
+                headers = list(data[0].keys())
+                parts.append(" | ".join(headers))
+                parts.append("-" * 60)
+
+                # Show data rows (limit to 100 for prompt size)
+                for row in data[:100]:
+                    parts.append(" | ".join(str(row.get(h, "")) for h in headers))
+
+                if len(data) > 100:
+                    parts.append(f"... and {len(data) - 100} more rows")
+
+            parts.append("")
+
+        return "\n".join(parts) if parts else "No data retrieved."
+
+    # ------------------------------------------------------------------
+    # Main entry point
+    # ------------------------------------------------------------------
+
+    async def answer_question(
+        self,
+        question: str,
+        on_progress: Callable[[str, dict], None] | None = None,
+    ) -> dict:
+        """Three-phase intelligent query engine: PLAN → EXECUTE → ANALYZE.
+
+        Args:
+            question: Natural language question from the user.
+            on_progress: Optional callback for phase progress updates.
+                Called with (phase_name, details_dict).
+
+        Returns dict with keys: answer, queries, data, complexity, refused.
         """
         # Sanitize user input (injection detection + length enforcement)
         try:
@@ -283,8 +395,9 @@ class SQLService:
         except ValueError as e:
             return {
                 "answer": str(e),
-                "sql": None,
+                "queries": [],
                 "data": [],
+                "complexity": "simple",
                 "refused": True,
             }
 
@@ -292,58 +405,140 @@ class SQLService:
         dangerous_words = ["delete", "drop", "truncate", "update", "insert", "alter", "remove all"]
         question_lower = question.lower()
         if any(word in question_lower for word in dangerous_words):
-            # Still generate SQL to show what was attempted, but refuse
             return {
                 "answer": SQL_REFUSAL_MESSAGE,
-                "sql": None,
+                "queries": [],
                 "data": [],
+                "complexity": "simple",
                 "refused": True,
             }
 
+        def _emit(phase: str, details: dict):
+            if on_progress:
+                on_progress(phase, details)
+
         try:
-            # ── QUERY PHASE ──────────────────────────────────────
-            # Step 1: Generate SQL
-            sql = await self._generate_sql(question)
-            logger.info("Generated SQL for question: %s", sql[:200])
+            # ── PHASE 1: PLAN ────────────────────────────────────
+            _emit("planning", {"message": "Planning analysis approach..."})
+            plan = await self._create_query_plan(question)
+            complexity = plan["complexity"]
+            logger.info(
+                "Query plan: complexity=%s, queries=%d",
+                complexity, len(plan["queries"]),
+            )
+            _emit("planned", {
+                "complexity": complexity,
+                "query_count": len(plan["queries"]),
+                "message": (
+                    f"Running {'multi-query ' if len(plan['queries']) > 1 else ''}"
+                    f"{complexity} analysis..."
+                ),
+            })
 
-            # Step 2: Validate and execute
-            try:
-                results = self._execute_sql(sql)
-            except SQLServiceError:
-                # Step 2b: If execution fails, retry SQL generation with error context
-                logger.warning("First SQL attempt failed, retrying with error context")
-                retry_prompt = (
-                    f"The previous SQL query failed. The question was: {question}\n"
-                    f"The failed query was: {sql}\n"
-                    f"Please generate a corrected SQLite query."
-                )
-                sql = await self._generate_sql(retry_prompt)
-                results = self._execute_sql(sql)
+            # ── PHASE 2: EXECUTE ─────────────────────────────────
+            all_results: list[dict] = []
+            all_queries: list[str] = []
+            total = len(plan["queries"])
 
-            # Step 3: Fallback — if query returned no rows, try a broader query
-            if not results:
-                logger.info("Query returned 0 rows, attempting fallback query")
+            for i, query_spec in enumerate(plan["queries"]):
+                _emit("executing", {
+                    "query_number": i + 1,
+                    "total_queries": total,
+                    "purpose": query_spec["purpose"],
+                    "message": f"Running query {i + 1} of {total}: {query_spec['purpose']}",
+                })
+
                 try:
-                    fallback_sql = await self._generate_fallback_sql(question, sql)
-                    logger.info("Fallback SQL: %s", fallback_sql[:200])
-                    fallback_results = self._execute_sql(fallback_sql)
-                    if fallback_results:
-                        sql = fallback_sql
-                        results = fallback_results
-                        logger.info("Fallback query returned %d rows", len(results))
-                except (SQLServiceError, ClaudeServiceError) as fallback_err:
-                    logger.warning("Fallback query also failed: %s", fallback_err)
-                    # Continue with empty results — the analysis phase will
-                    # explain that no data matched and suggest rephrasing
+                    sql = await self._generate_planned_sql(
+                        question, query_spec,
+                        query_number=i + 1,
+                        total_queries=total,
+                    )
+                    logger.info("Generated SQL [%d/%d]: %s", i + 1, total, sql[:200])
 
-            # ── ANALYSIS PHASE ───────────────────────────────────
-            # Step 4: Send results to Claude for deep analysis
-            answer = await self._synthesize_answer(question, sql, results)
+                    # Execute with retry
+                    try:
+                        results = self._execute_sql(sql)
+                    except SQLServiceError as exec_err:
+                        logger.warning(
+                            "SQL execution failed for query %d, retrying: %s",
+                            i + 1, exec_err,
+                        )
+                        retry_desc = (
+                            f"The previous query failed with: {exec_err}. "
+                            f"Please generate a corrected query for: {query_spec['description']}"
+                        )
+                        retry_spec = {
+                            "purpose": query_spec["purpose"],
+                            "description": retry_desc,
+                        }
+                        sql = await self._generate_planned_sql(
+                            question, retry_spec,
+                            query_number=i + 1,
+                            total_queries=total,
+                        )
+                        results = self._execute_sql(sql)
+
+                    # Fallback for empty results on the first (or only) query
+                    if not results and i == 0:
+                        logger.info("Query %d returned 0 rows, attempting fallback", i + 1)
+                        try:
+                            fallback_sql = await self._generate_fallback_sql(question, sql)
+                            fallback_results = self._execute_sql(fallback_sql)
+                            if fallback_results:
+                                sql = fallback_sql
+                                results = fallback_results
+                                logger.info("Fallback query returned %d rows", len(results))
+                        except (SQLServiceError, ClaudeServiceError) as fb_err:
+                            logger.warning("Fallback query failed: %s", fb_err)
+
+                    all_queries.append(sql)
+                    all_results.append({
+                        "purpose": query_spec["purpose"],
+                        "sql": sql,
+                        "data": results,
+                    })
+
+                except (SQLServiceError, ClaudeServiceError) as query_err:
+                    logger.error("Query %d failed completely: %s", i + 1, query_err)
+                    # Skip failed queries — analyze with whatever data we have
+                    continue
+
+            # If ALL queries failed, return error
+            if not all_results or all(not r.get("data") for r in all_results):
+                # If we have queries but no data, let the analysis handle it
+                if all_results:
+                    pass  # Let Phase 3 explain the empty results
+                else:
+                    return {
+                        "answer": (
+                            "I wasn't able to retrieve data for that question. "
+                            "Could you try rephrasing?"
+                        ),
+                        "queries": all_queries,
+                        "data": [],
+                        "complexity": complexity,
+                        "refused": False,
+                    }
+
+            # ── PHASE 3: ANALYZE ─────────────────────────────────
+            _emit("analyzing", {
+                "message": "Analyzing results...",
+                "rows_total": sum(len(r.get("data", [])) for r in all_results),
+            })
+
+            answer = await self._analyze_results(question, all_results, plan)
+
+            # Flatten data for frontend (combine all query results)
+            combined_data = []
+            for r in all_results:
+                combined_data.extend(r.get("data", [])[:50])
 
             return {
                 "answer": answer,
-                "sql": sql,
-                "data": results[:100],  # Limit data sent to frontend
+                "queries": all_queries,
+                "data": combined_data[:100],
+                "complexity": complexity,
                 "refused": False,
             }
 
@@ -354,8 +549,9 @@ class SQLService:
                     "I'm sorry, the AI service is temporarily unavailable. "
                     "Please try again in a moment."
                 ),
-                "sql": None,
+                "queries": [],
                 "data": [],
+                "complexity": "simple",
                 "refused": False,
             }
         except SQLServiceError as e:
@@ -365,16 +561,18 @@ class SQLService:
                     "I wasn't able to answer that question. The query may be too complex "
                     "or reference data that doesn't exist. Could you try rephrasing?"
                 ),
-                "sql": None,
+                "queries": [],
                 "data": [],
+                "complexity": "simple",
                 "refused": False,
             }
         except Exception as e:
             logger.error("Unexpected error in chat pipeline: %s", e, exc_info=True)
             return {
                 "answer": "I encountered an unexpected error. Please try again.",
-                "sql": None,
+                "queries": [],
                 "data": [],
+                "complexity": "simple",
                 "refused": False,
             }
 
